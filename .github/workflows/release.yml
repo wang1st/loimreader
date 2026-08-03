@@ -195,12 +195,18 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_TAG: ${{ steps.meta.outputs.tag }}
-        run: >-
-          gh release create "$RELEASE_TAG"
-          dist/* SHA256SUMS loimreader.spdx.json release-manifest.json release-manifest.sig release-manifest.sig.base64
-          --target "$GITHUB_SHA"
-          --generate-notes
-          --title "LoimReader $RELEASE_TAG"
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          release_flags=()
+          if [[ "$RELEASE_VERSION" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          gh release create "$RELEASE_TAG" "${release_flags[@]}" \
+            dist/* SHA256SUMS loimreader.spdx.json release-manifest.json \
+            release-manifest.sig release-manifest.sig.base64 \
+            --target "$GITHUB_SHA" \
+            --generate-notes \
+            --title "LoimReader $RELEASE_TAG"
 
   publish-ctdy123:
     name: Register version on ctdy123.com
