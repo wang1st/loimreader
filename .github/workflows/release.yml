@@ -168,7 +168,9 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: release-${{ matrix.platform }}-${{ matrix.arch }}
-          path: dist/*
+          # CPack also creates dist/_CPack_Packages as an internal workspace.
+          # Upload only the validated installer, never that transient directory.
+          path: dist/LoimReader_*
           if-no-files-found: error
           retention-days: 30
 
