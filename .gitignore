@@ -1,0 +1,117 @@
+# Qt build artifacts
+build/
+release/
+debug/
+*.pro.user*
+*.pro.user
+*.qbs.user
+*.qbs.user.*
+*.moc
+moc_*.cpp
+moc_*.h
+qrc_*.cpp
+ui_*.h
+*.qm
+*.prl
+
+# Qt Creator
+*.autosave
+
+# Compiled Object files
+*.slo
+*.lo
+*.o
+*.obj
+
+# Precompiled Headers
+*.gch
+*.pch
+
+# Compiled Dynamic libraries
+*.so
+*.dylib
+*.dll
+
+# Fortran module files
+*.mod
+
+# Compiled Static libraries
+*.lai
+*.la
+*.a
+*.lib
+
+# Executables
+*.exe
+*.out
+*.app
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Temporary files
+*.tmp
+*.temp
+*.log
+
+# Package directories
+dist/
+package/
+installer/
+
+# Test reports
+*_test_report.txt
+package_test_report.txt
+
+# Generated obfuscated files
+*_obfuscated.*
+
+# Backup files
+*.bak
+*.backup
+
+# Python cache
+__pycache__/
+*.pyc
+*.pyo
+
+# Inno Setup output
+*.exe
+Output/
+
+# Qt translations (keep source .ts files, ignore compiled .qm)
+*.qm
+!i18n/*.qm
+
+# Keep important files
+!clps.pro
+!CMakeLists.txt
+!*.md
+!*.iss
+!*.ps1
+!*.cmd
+!*.py
+build*/
+dist*/
+
+# Local credentials and runtime state must never enter source control.
+user.ini
+secrets.json
+*.pem
+*.key
+.env
+.env.*
+!.env.example

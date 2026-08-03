@@ -1,0 +1,43 @@
+{
+  "appName": "ctdy123",
+  "appDisplayName": "LongImg Reader",
+  "lastUpdated": "2025-01-15T10:00:00Z",
+  "releases": [
+    {
+      "version": "2.7",
+      "title": "LongImg Reader v2.7",
+      "description": "What's new in this update:<br/>• 🆕 Brand new lightweight auto-update system<br/>• 🎨 Improved UI design with unified dialog styles<br/>• 🚀 Enhanced update checking performance, 80% less code<br/>• 🔧 Fixed various known issues<br/>• 📱 Enhanced user experience and interface responsiveness",
+      "releaseDate": "2025-01-15",
+      "isForced": false,
+      "releaseNotes": "https://limereader.com/release-notes/v2.7.html",
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-macos.dmg",
+          "fileSize": 55000000,
+          "checksum": "sha256:replace-with-actual-sha256-hash"
+        },
+        {
+          "name": "windows",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-windows.exe",
+          "fileSize": 48000000,
+          "checksum": "sha256:replace-with-actual-sha256-hash"
+        }
+      ]
+    },
+    {
+      "version": "2.6",
+      "title": "LongImg Reader v2.6",
+      "description": "Current version update content",
+      "releaseDate": "2024-12-20",
+      "isForced": false,
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.6-macos.dmg",
+          "fileSize": 51200000
+        }
+      ]
+    }
+  ]
+}

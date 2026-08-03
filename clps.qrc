@@ -1,0 +1,9 @@
+<RCC>
+    <qresource prefix="/">
+        <file>i18n/ctdy123_en.qm</file>
+        <file>images/fastspring-logo.png</file>
+        <file>images/sitelogo.png</file>
+        <file>images/qqgroup.png</file>
+        <file>images/myshop.jpeg</file>
+    </qresource>
+</RCC>

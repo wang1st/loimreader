@@ -1,0 +1,154 @@
+# Makefile for LoimReader (影谷长图阅读器)
+# macOS 构建和打包自动化
+
+.PHONY: all build debug release clean dmg package run help install
+
+# 默认目标
+all: build
+
+# 应用信息
+APP_NAME = LoimReader
+PROJECT_NAME = ctdy123
+VERSION = 2.6
+
+# 路径配置
+BUILD_DIR = build_macos
+DIST_DIR = dist_macos
+APP_PATH = $(BUILD_DIR)/$(PROJECT_NAME).app
+DMG_PATH = $(DIST_DIR)/$(APP_NAME)_$(VERSION).dmg
+
+# Qt 配置
+QT_DIR = $(shell qmake -query QT_INSTALL_PREFIX)
+MACDEPLOYQT = $(QT_DIR)/bin/macdeployqt
+
+# 构建配置
+QMAKE_CONFIG = CONFIG+=release
+MAKE_JOBS = $(shell sysctl -n hw.ncpu)
+
+help:
+	@echo "LoimReader (影谷长图阅读器) 构建系统"
+	@echo ""
+	@echo "可用目标:"
+	@echo "  build     - 构建Release版本应用程序"
+	@echo "  debug     - 构建Debug版本应用程序"
+	@echo "  release   - 构建Release版本应用程序（同build）"
+	@echo "  dmg       - 创建DMG安装包（需要先构建）"
+	@echo "  package   - 构建并打包DMG"
+	@echo "  run       - 构建并运行应用程序"
+	@echo "  clean     - 清理所有构建文件"
+	@echo "  install   - 安装到/Applications"
+	@echo "  help      - 显示此帮助信息"
+	@echo ""
+	@echo "示例:"
+	@echo "  make build    # 构建应用程序"
+	@echo "  make package  # 构建并打包DMG"
+	@echo "  make clean    # 清理构建文件"
+
+# 准备构建目录
+$(BUILD_DIR):
+	@echo "创建构建目录..."
+	@mkdir -p $(BUILD_DIR)
+	@mkdir -p $(DIST_DIR)
+
+# 生成Makefile
+$(BUILD_DIR)/Makefile: $(BUILD_DIR) clps.pro
+	@echo "生成qmake Makefile..."
+	@cd $(BUILD_DIR) && qmake $(QMAKE_CONFIG) ../clps.pro
+
+# 构建应用程序
+$(APP_PATH): $(BUILD_DIR)/Makefile
+	@echo "编译应用程序..."
+	@$(MAKE) -C $(BUILD_DIR) -j$(MAKE_JOBS)
+	@if [ -d "$(APP_PATH)" ]; then \
+		echo "✓ 应用程序构建完成: $(APP_PATH)"; \
+	else \
+		echo "✗ 构建失败"; exit 1; \
+	fi
+
+# 部署依赖
+deploy: $(APP_PATH)
+	@echo "部署应用程序依赖..."
+	@$(MACDEPLOYQT) $(APP_PATH) -verbose=1
+	@echo "✓ 依赖部署完成"
+
+# 构建目标
+build: deploy
+	@echo "✓ 构建完成"
+
+release: build
+
+debug: 
+	@$(MAKE) build QMAKE_CONFIG="CONFIG+=debug"
+
+# 创建DMG
+$(DMG_PATH): $(APP_PATH)
+	@echo "创建DMG安装包..."
+	@mkdir -p $(DIST_DIR)
+	@rm -rf $(DIST_DIR)/dmg_temp
+	@mkdir -p $(DIST_DIR)/dmg_temp
+	@cp -R $(APP_PATH) $(DIST_DIR)/dmg_temp/
+	@ln -sf /Applications $(DIST_DIR)/dmg_temp/Applications
+	@echo "$(APP_NAME) v$(VERSION)" > $(DIST_DIR)/dmg_temp/README.txt
+	@echo "" >> $(DIST_DIR)/dmg_temp/README.txt
+	@echo "将应用程序拖拽到Applications文件夹完成安装" >> $(DIST_DIR)/dmg_temp/README.txt
+	@rm -f $(DMG_PATH)
+	@hdiutil create -volname "$(APP_NAME)" \
+		-srcfolder $(DIST_DIR)/dmg_temp \
+		-ov -format UDZO \
+		-fs HFS+ \
+		$(DMG_PATH)
+	@rm -rf $(DIST_DIR)/dmg_temp
+	@if [ -f "$(DMG_PATH)" ]; then \
+		echo "✓ DMG创建完成: $(DMG_PATH)"; \
+		echo "文件大小: $$(du -h $(DMG_PATH) | cut -f1)"; \
+	else \
+		echo "✗ DMG创建失败"; exit 1; \
+	fi
+
+dmg: $(DMG_PATH)
+
+# 完整打包
+package: build dmg
+	@echo "✓ 打包完成！"
+	@echo "应用程序: $(APP_PATH)"
+	@echo "安装包: $(DMG_PATH)"
+
+# 运行应用程序
+run: build
+	@echo "启动应用程序..."
+	@open $(APP_PATH)
+
+# 安装到系统
+install: build
+	@echo "安装应用程序到 /Applications..."
+	@sudo cp -R $(APP_PATH) /Applications/
+	@echo "✓ 安装完成"
+
+# 清理
+clean:
+	@echo "清理构建文件..."
+	@rm -rf $(BUILD_DIR)
+	@rm -rf $(DIST_DIR)
+	@rm -f Makefile *.o moc_* ui_* qrc_*
+	@rm -rf $(PROJECT_NAME).app
+	@echo "✓ 清理完成"
+
+# 依赖检查
+check-deps:
+	@echo "检查构建依赖..."
+	@which qmake > /dev/null || (echo "✗ qmake未找到"; exit 1)
+	@which make > /dev/null || (echo "✗ make未找到"; exit 1)
+	@which hdiutil > /dev/null || (echo "✗ hdiutil未找到"; exit 1)
+	@test -f "$(MACDEPLOYQT)" || (echo "✗ macdeployqt未找到"; exit 1)
+	@echo "✓ 所有依赖都已安装"
+
+# 显示构建信息
+info:
+	@echo "构建信息:"
+	@echo "  应用名称: $(APP_NAME)"
+	@echo "  项目名称: $(PROJECT_NAME)"
+	@echo "  版本: $(VERSION)"
+	@echo "  Qt路径: $(QT_DIR)"
+	@echo "  构建目录: $(BUILD_DIR)"
+	@echo "  分发目录: $(DIST_DIR)"
+	@echo "  CPU核心数: $(MAKE_JOBS)"

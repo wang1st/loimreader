@@ -1,0 +1,154 @@
+name: C17 desktop CI
+
+on:
+  push:
+    branches: [main, master]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    name: ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows
+            arch: amd64
+            runner: windows-2025
+          - platform: windows
+            arch: arm64
+            runner: windows-11-arm
+          - platform: macos
+            arch: amd64
+            runner: macos-26-intel
+          - platform: macos
+            arch: arm64
+            runner: macos-26
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux desktop headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxfixes-dev libxss-dev libwayland-dev \
+            libxkbcommon-dev libdecor-0-dev
+
+      - name: Configure
+        run: >-
+          cmake -S . -B build
+          -DLOIM_BUILD_LEGACY_QT=OFF
+          -DLOIM_BUILD_DESKTOP=ON
+          -DBUILD_TESTING=ON
+          -DLOIM_ENABLE_STRICT_WARNINGS=ON
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build
+        run: cmake --build build --config Release --parallel
+
+      - name: Test
+        run: ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install
+        run: cmake --install build --config Release --prefix stage/LoimReader
+
+      - name: Reject legacy Qt and Poppler files
+        shell: bash
+        run: |
+          if find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \) | grep -q .; then
+            echo 'Legacy Qt/Poppler file found in release stage' >&2
+            find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \)
+            exit 1
+          fi
+
+      - name: Audit Unix runtime dependencies
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/LoimReader.app/Contents/MacOS/LoimReader"
+          else
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader"
+          fi
+          cmake \
+            -DLOIM_BINARY="$binary" \
+            -DLOIM_STAGE_ROOT="$GITHUB_WORKSPACE/stage/LoimReader" \
+            -P scripts/check-runtime-dependencies.cmake
+
+      - name: Audit Windows runtime dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          cmake
+          "-DLOIM_BINARY=$env:GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader.exe"
+          "-DLOIM_STAGE_ROOT=$env:GITHUB_WORKSPACE/stage/LoimReader"
+          -P scripts/check-runtime-dependencies.cmake
+
+      - name: Package Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C stage -czf "dist/LoimReader_3.0.0_${{ matrix.platform }}_${{ matrix.arch }}.tar.gz" LoimReader
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path stage/LoimReader -DestinationPath "dist/LoimReader_3.0.0_${{ matrix.platform }}_${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: loimreader-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 14
+
+  sanitizers:
+    name: Address and undefined behavior sanitizers
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configure
+        run: >-
+          cmake -S . -B build-sanitize
+          -DLOIM_BUILD_LEGACY_QT=OFF
+          -DLOIM_BUILD_DESKTOP=OFF
+          -DBUILD_TESTING=ON
+          -DLOIM_ENABLE_STRICT_WARNINGS=ON
+          -DCMAKE_BUILD_TYPE=Debug
+          -DCMAKE_C_FLAGS=-fsanitize=address,undefined\ -fno-omit-frame-pointer
+          -DCMAKE_EXE_LINKER_FLAGS=-fsanitize=address,undefined
+      - name: Build and test
+        run: |
+          cmake --build build-sanitize --parallel
+          ctest --test-dir build-sanitize --output-on-failure
+
+  complete:
+    name: All six targets passed
+    if: always()
+    needs: [build, sanitizers]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Check matrix result
+        env:
+          BUILD_RESULT: ${{ needs.build.result }}
+          SANITIZER_RESULT: ${{ needs.sanitizers.result }}
+        run: |
+          test "$BUILD_RESULT" = success
+          test "$SANITIZER_RESULT" = success

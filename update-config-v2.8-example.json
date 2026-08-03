@@ -1,0 +1,62 @@
+{
+  "appName": "ctdy123",
+  "appDisplayName": "影谷长图阅读器",
+  "lastUpdated": "2025-02-15T10:00:00Z",
+  "releases": [
+    {
+      "version": "2.8",
+      "title": "影谷长图阅读器 v2.8",
+      "description": "重要更新：<br/>• 🎨 全新界面设计，更加现代化<br/>• ⚡ 性能优化，处理速度提升30%<br/>• 🔐 增强安全性和稳定性<br/>• 🌍 改进多语言支持<br/>• 📊 新增使用统计和分析功能",
+      "releaseDate": "2025-02-15",
+      "isForced": false,
+      "releaseNotes": "https://ctdy123.com/release-notes/v2.8.html",
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.8-macos.dmg",
+          "fileSize": 58000000,
+          "checksum": "sha256:新版本文件的SHA256值"
+        },
+        {
+          "name": "windows",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.8-windows.exe",
+          "fileSize": 50000000,
+          "checksum": "sha256:新版本文件的SHA256值"
+        }
+      ]
+    },
+    {
+      "version": "2.7",
+      "title": "影谷长图阅读器 v2.7",
+      "description": "本次更新内容：<br/>• 🆕 全新轻量级自动更新系统<br/>• 🎨 优化了界面设计，统一了对话框风格<br/>• 🚀 提升了更新检查性能，减少80%代码量",
+      "releaseDate": "2025-01-15",
+      "isForced": false,
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-macos.dmg",
+          "fileSize": 55000000
+        },
+        {
+          "name": "windows",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-windows.exe",
+          "fileSize": 48000000
+        }
+      ]
+    },
+    {
+      "version": "2.6",
+      "title": "影谷长图阅读器 v2.6",
+      "description": "当前版本的更新内容",
+      "releaseDate": "2024-12-20",
+      "isForced": false,
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.6-macos.dmg",
+          "fileSize": 51200000
+        }
+      ]
+    }
+  ]
+}

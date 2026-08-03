@@ -1,0 +1,87 @@
+<?xml version="1.0" encoding="utf-8"?>
+<rss version="2.0" xmlns:sparkle="http://www.andymatuschak.org/xml-namespaces/sparkle" xmlns:fervor="https://github.com/pypt/fervor">
+    <channel>
+        <title>LongImg Reader Updates</title>
+        <link>https://limereader.com/</link>
+        <description>LongImg Reader automatic updates feed</description>
+        <language>en-us</language>
+        
+        <!-- New version 2.7 - With new lightweight update system -->
+        <item>
+            <title>LongImg Reader v2.7</title>
+            <sparkle:releaseNotesLink>https://limereader.com/release-notes/v2.7.html</sparkle:releaseNotesLink>
+            <description><![CDATA[
+                <h3>Major Update - v2.7</h3>
+                <p><strong>This version introduces a brand new lightweight auto-update system!</strong></p>
+                <ul>
+                    <li>🆕 Brand new lightweight auto-update system, 80% performance improvement</li>
+                    <li>🎨 Optimized UI design with unified dialog styles</li>
+                    <li>🚀 Reduced code complexity, enhanced stability</li>
+                    <li>🔧 Fixed known issues, improved user experience</li>
+                    <li>📱 Enhanced interface responsiveness</li>
+                </ul>
+                <p><em>Note: Starting from v2.7, we use a new update mechanism that makes future updates more efficient and convenient.</em></p>
+            ]]></description>
+            <pubDate>Wed, 15 Jan 2025 10:00:00 +0800</pubDate>
+            
+            <!-- macOS version -->
+            <enclosure url="https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-macos.dmg"
+                       sparkle:version="2.7"
+                       fervor:version="2.7"
+                       fervor:platform="macos"
+                       length="57671680"
+                       type="application/octet-stream" />
+            
+            <!-- Windows version -->
+            <enclosure url="https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-windows.exe"
+                       sparkle:version="2.7"
+                       fervor:version="2.7"
+                       fervor:platform="windows"
+                       length="50331648"
+                       type="application/octet-stream" />
+        </item>
+        
+        <!-- Version 2.6 -->
+        <item>
+            <title>LongImg Reader v2.6</title>
+            <sparkle:releaseNotesLink>https://limereader.com/release-notes/v2.6.html</sparkle:releaseNotesLink>
+            <description><![CDATA[
+                <h3>v2.6 Updates</h3>
+                <ul>
+                    <li>🔧 Performance optimization and bug fixes</li>
+                    <li>🎨 UI detail improvements</li>
+                    <li>📊 Feature enhancements</li>
+                </ul>
+            ]]></description>
+            <pubDate>Fri, 20 Dec 2024 10:00:00 +0800</pubDate>
+            
+            <enclosure url="https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.6-macos.dmg"
+                       sparkle:version="2.6"
+                       fervor:version="2.6"
+                       fervor:platform="macos"
+                       length="53687091"
+                       type="application/octet-stream" />
+        </item>
+        
+        <!-- Version 2.5 - Your current version -->
+        <item>
+            <title>LongImg Reader v2.5</title>
+            <sparkle:releaseNotesLink>https://limereader.com/release-notes/v2.5.html</sparkle:releaseNotesLink>
+            <description><![CDATA[
+                <h3>v2.5 Updates</h3>
+                <ul>
+                    <li>Current version features</li>
+                    <li>Basic functionality improvements</li>
+                </ul>
+            ]]></description>
+            <pubDate>Mon, 01 Dec 2024 10:00:00 +0800</pubDate>
+            
+            <enclosure url="https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.5-macos.dmg"
+                       sparkle:version="2.5"
+                       fervor:version="2.5"
+                       fervor:platform="macos"
+                       length="51200000"
+                       type="application/octet-stream" />
+        </item>
+    </channel>
+</rss>

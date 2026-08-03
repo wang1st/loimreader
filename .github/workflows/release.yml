@@ -1,0 +1,242 @@
+name: Release all desktop architectures
+
+on:
+  push:
+    tags: ['v3.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version, for example 3.0.0-alpha.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loimreader-production-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Package ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            runner: ubuntu-24.04-arm
+          - platform: windows
+            arch: amd64
+            runner: windows-2025
+          - platform: windows
+            arch: arm64
+            runner: windows-11-arm
+          - platform: macos
+            arch: amd64
+            runner: macos-26-intel
+          - platform: macos
+            arch: arm64
+            runner: macos-26
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Linux desktop headers
+        if: runner.os == 'Linux'
+        run: |
+          sudo apt-get update
+          sudo apt-get install --yes \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+            libxi-dev libxfixes-dev libxss-dev libwayland-dev \
+            libxkbcommon-dev libdecor-0-dev
+
+      - name: Resolve version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION:-${GITHUB_REF_NAME#v}}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $version" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Configure
+        shell: bash
+        run: >-
+          cmake -S . -B build
+          -DLOIM_BUILD_LEGACY_QT=OFF
+          -DLOIM_BUILD_DESKTOP=ON
+          -DBUILD_TESTING=ON
+          -DLOIM_ENABLE_STRICT_WARNINGS=ON
+          -DLOIM_VERSION_OVERRIDE="$RELEASE_VERSION"
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build and test
+        shell: bash
+        run: |
+          cmake --build build --config Release --parallel
+          ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install
+        shell: bash
+        run: cmake --install build --config Release --prefix stage/LoimReader
+
+      - name: Reject legacy Qt and Poppler files
+        shell: bash
+        run: |
+          if find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \) | grep -q .; then
+            echo 'Legacy Qt/Poppler file found in release stage' >&2
+            find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \)
+            exit 1
+          fi
+
+      - name: Audit Unix runtime dependencies
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/LoimReader.app/Contents/MacOS/LoimReader"
+          else
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader"
+          fi
+          cmake \
+            -DLOIM_BINARY="$binary" \
+            -DLOIM_STAGE_ROOT="$GITHUB_WORKSPACE/stage/LoimReader" \
+            -P scripts/check-runtime-dependencies.cmake
+
+      - name: Audit Windows runtime dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          cmake
+          "-DLOIM_BINARY=$env:GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader.exe"
+          "-DLOIM_STAGE_ROOT=$env:GITHUB_WORKSPACE/stage/LoimReader"
+          -P scripts/check-runtime-dependencies.cmake
+
+      - name: Package Unix
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          mkdir -p dist
+          tar -C stage -czf "dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.tar.gz" LoimReader
+
+      - name: Package Windows
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force dist | Out-Null
+          Compress-Archive -Path stage/LoimReader -DestinationPath "dist/LoimReader_${env:RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.zip"
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
+          retention-days: 30
+
+  github-release:
+    name: Create immutable GitHub Release
+    needs: build
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    outputs:
+      version: ${{ steps.meta.outputs.version }}
+      tag: ${{ steps.meta.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION:-${GITHUB_REF_NAME#v}}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate all six packages and create manifest
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          ./scripts/create-release-manifest.sh dist release-manifest.json
+          ./scripts/create-sbom.sh loimreader.spdx.json
+          sha256sum dist/* release-manifest.json loimreader.spdx.json > SHA256SUMS
+
+      - name: Sign exact manifest bytes with Ed25519
+        env:
+          RELEASE_ED25519_PRIVATE_KEY: ${{ secrets.RELEASE_ED25519_PRIVATE_KEY }}
+        run: |
+          test "${#RELEASE_ED25519_PRIVATE_KEY}" = 64
+          key_der="$(mktemp)"
+          key_pem="$(mktemp)"
+          trap 'rm -f "$key_der" "$key_pem"' EXIT
+          printf '302e020100300506032b657004220420%s' "$RELEASE_ED25519_PRIVATE_KEY" | xxd -r -p > "$key_der"
+          openssl pkey -inform DER -in "$key_der" -out "$key_pem"
+          openssl pkeyutl -sign -rawin -inkey "$key_pem" -in release-manifest.json -out release-manifest.sig
+          base64 -w 0 release-manifest.sig > release-manifest.sig.base64
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+        run: >-
+          gh release create "$RELEASE_TAG"
+          dist/* SHA256SUMS loimreader.spdx.json release-manifest.json release-manifest.sig release-manifest.sig.base64
+          --target "$GITHUB_SHA"
+          --generate-notes
+          --title "LoimReader $RELEASE_TAG"
+
+  publish-ctdy123:
+    name: Register version on ctdy123.com
+    needs: github-release
+    runs-on: ubuntu-24.04
+    environment: ctdy123-production
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v4
+      - name: Download signed release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ needs.github-release.outputs.tag }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern release-manifest.json
+          gh release download "$RELEASE_TAG" --pattern release-manifest.sig.base64
+
+      - name: Publish signed metadata only
+        env:
+          CTDY123_RELEASE_TOKEN: ${{ secrets.CTDY123_RELEASE_TOKEN }}
+        run: |
+          test -n "$CTDY123_RELEASE_TOKEN"
+          signature="$(cat release-manifest.sig.base64)"
+          curl --fail-with-body --retry 4 --retry-all-errors \
+            --request POST \
+            --header "Authorization: Bearer $CTDY123_RELEASE_TOKEN" \
+            --header "X-Release-Signature: $signature" \
+            --header "Content-Type: application/json" \
+            --header "Idempotency-Key: github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
+            --data-binary @release-manifest.json \
+            https://ctdy123.com/api/admin/versions/publish
+
+      - name: Verify public version endpoint
+        env:
+          RELEASE_VERSION: ${{ needs.github-release.outputs.version }}
+        run: |
+          observed="$(curl --fail --retry 4 https://ctdy123.com/api/client/version/info/loimreader | jq -r .version)"
+          test "$observed" = "$RELEASE_VERSION"

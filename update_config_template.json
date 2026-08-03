@@ -1,0 +1,43 @@
+{
+  "appName": "ctdy123",
+  "appDisplayName": "影谷长图阅读器",
+  "lastUpdated": "2024-09-25T10:00:00Z",
+  "releases": [
+    {
+      "version": "2.7",
+      "title": "影谷长图阅读器 v2.7",
+      "description": "本次更新内容：<br>• 修复了一些已知问题<br>• 优化了用户界面体验<br>• 提升了处理性能<br>• 增加了新的功能特性",
+      "releaseDate": "2024-09-25",
+      "isForced": false,
+      "releaseNotes": "https://ctdy123.com/release-notes/v2.7.html",
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-macos.dmg",
+          "fileSize": 52428800,
+          "checksum": "sha256:abcd1234..."
+        },
+        {
+          "name": "windows",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.7-windows.exe",
+          "fileSize": 45678912,
+          "checksum": "sha256:efgh5678..."
+        }
+      ]
+    },
+    {
+      "version": "2.6",
+      "title": "影谷长图阅读器 v2.6",
+      "description": "当前版本的更新内容",
+      "releaseDate": "2024-09-20",
+      "isForced": false,
+      "platforms": [
+        {
+          "name": "macos",
+          "downloadUrl": "https://releases.oss-cn-beijing.aliyuncs.com/releases/ctdy123-v2.6-macos.dmg",
+          "fileSize": 51200000
+        }
+      ]
+    }
+  ]
+}

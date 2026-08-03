@@ -1,0 +1,418 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!DOCTYPE TS>
+<TS version="2.1">
+<context>
+    <name>BuyDialog</name>
+    <message>
+        <location filename="../buydialog.ui" line="17"/>
+        <source>购买并解锁软件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="32"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;复制下方链接后打开浏览器去快发卡平台(kuaifaka.com)购买卡密。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="42"/>
+        <source>https://pr.kuaifaka.com/item/W0bdE</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="52"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;或者通过手机扫描下方二维码完成支付。&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="75"/>
+        <source>将卡密复制到下方文本框中再点击注册按钮解锁软件使用限制。</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="101"/>
+        <source>注册</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.ui" line="108"/>
+        <source>退出</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.cpp" line="78"/>
+        <location filename="../buydialog.cpp" line="225"/>
+        <source>无效的卡密</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.cpp" line="156"/>
+        <source>注册成功，请重新启动软件解锁功能。</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.cpp" line="160"/>
+        <source>注册失败，请和作者联系！</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.cpp" line="207"/>
+        <source>该台电脑已注册</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../buydialog.cpp" line="211"/>
+        <source>该卡密已被使用</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>FvUpdateConfirmDialog</name>
+    <message>
+        <location filename="../fervor/fvupdateconfirmdialog.ui" line="14"/>
+        <source>下载程序</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdateconfirmdialog.ui" line="20"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;最新版本的程序的下载地址在:&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdateconfirmdialog.ui" line="27"/>
+        <source>&lt;a href=&quot;%1&quot;&gt;%1&lt;/a&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdateconfirmdialog.ui" line="40"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;先下载这个最新版本, 关闭 &amp;quot;%1&amp;quot;, 安装下载的最新版 , 然后重新打开 &amp;quot;%1&amp;quot;.&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdateconfirmdialog.ui" line="47"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;点击 &amp;quot;OK&amp;quot;, 打开浏览器下载最新版本的程序&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>FvUpdateWindow</name>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="14"/>
+        <source>软件更新</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="28"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;软件的新版本 %1 已发布!&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="35"/>
+        <source>&lt;html&gt;&lt;head/&gt;&lt;body&gt;&lt;p&gt;%1的最新版本%2现在可以更新了！您电脑上目前的版本是%3，您愿意下载最新的版本进行更新吗？&lt;/p&gt;&lt;/body&gt;&lt;/html&gt;</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="48"/>
+        <source>最新版本说明:</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="78"/>
+        <source>跳过这个版本</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="98"/>
+        <source>下次启动提醒我</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdatewindow.ui" line="105"/>
+        <source>马上下载更新</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>FvUpdater</name>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="214"/>
+        <source>Unable to open this link in a browser. Please do it manually.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="343"/>
+        <source>Feed download failed: %1.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="483"/>
+        <source>Feed parsing failed: %1 %2.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="491"/>
+        <location filename="../fervor/fvupdater.cpp" line="541"/>
+        <source>No updates were found.</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="520"/>
+        <source>Feed error: &quot;release notes&quot; link is empty</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="529"/>
+        <source>Feed error: invalid &quot;release notes&quot; link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="533"/>
+        <source>Feed error: invalid &quot;enclosure&quot; with the download link</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="583"/>
+        <source>Error</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../fervor/fvupdater.cpp" line="599"/>
+        <source>Information</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>HelpDialog</name>
+    <message>
+        <location filename="../helpdialog.ui" line="20"/>
+        <source>使用指南</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../helpdialog.ui" line="53"/>
+        <source>常见问题问答
+
+问：如何去除软件输出时的水印？
+答：未注册时软件输出会有水印，需要购买卡密进行注册解除该功能限制。
+
+问：为何软件注册后输出时还有水印？
+答：软件注册认证需要时间，取决于您的网络速度。请耐心等待窗口标题栏上出现“已注册”提示后再进行操作。
+
+问：一个卡密只能用一台电脑吗？
+答：是的，一个卡密只能一台电脑使用。更换电脑或系统重装请和我们联系免费重新发送卡密。
+
+问：遇到问题如何和你们取得联系？
+答：推荐使用QQ群交流，群号348614472，可扫描以下二维码进入。也可发电邮至support@ctdy123.com和我们联系。
+</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../helpdialog.ui" line="104"/>
+        <source>关闭</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+<context>
+    <name>MainWindow</name>
+    <message>
+        <location filename="../mainwindow.cpp" line="249"/>
+        <source>不支持的图片格式或文件已损坏</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="290"/>
+        <location filename="../mainwindow.cpp" line="564"/>
+        <source>打印</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="313"/>
+        <source>导出到PDF</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="333"/>
+        <source>分页图片已输出至文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="520"/>
+        <source>就绪</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="525"/>
+        <source>指南</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="527"/>
+        <source>打开软件使用指南</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="530"/>
+        <source>注册</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="44"/>
+        <source>影谷长图打印</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="266"/>
+        <source>打开图像或PDF文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="314"/>
+        <source>PDF文件(*.pdf)</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="526"/>
+        <source>Ctrl+H</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="531"/>
+        <source>支付软件费用移除水印</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="534"/>
+        <source>减少边距</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="535"/>
+        <source>放大图片减少打印边距</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="539"/>
+        <source>增加边距</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="540"/>
+        <source>缩小图片增加打印边距</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="545"/>
+        <source>放大</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="546"/>
+        <source>放大画布显示更多细节</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="549"/>
+        <source>缩小</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="550"/>
+        <source>缩小画布显示更多图片</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="554"/>
+        <source>打开文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="555"/>
+        <source>Ctrl+O</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="556"/>
+        <source>打开需要操作的图片</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="558"/>
+        <source>保存文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="559"/>
+        <source>Ctrl+S</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="560"/>
+        <source>把多页图片存入到一个PDF文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="565"/>
+        <source>Ctrl+P</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="566"/>
+        <source>输出结果到打印机</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="569"/>
+        <source>退出</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="570"/>
+        <source>Ctrl+X</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="571"/>
+        <source>关闭窗口退出应用程序</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="576"/>
+        <source>双排</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="577"/>
+        <source>页面单/双排输出切换</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="580"/>
+        <source>页码</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="581"/>
+        <source>页码显示输出切换</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="589"/>
+        <source>文件</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="596"/>
+        <source>编辑</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="606"/>
+        <source>帮助</source>
+        <translation type="unfinished"></translation>
+    </message>
+    <message>
+        <location filename="../mainwindow.cpp" line="614"/>
+        <source>main</source>
+        <translation type="unfinished"></translation>
+    </message>
+</context>
+</TS>
