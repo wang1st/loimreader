@@ -32,8 +32,10 @@
 
 - 此发布链路不需要 `CTDY123_ROOT_PASSWORD`、`ZPULSE_SERVER_ROOT_PASSWORD` 或 SSH 私钥。
 - 不执行 `nginx reload`、`systemctl restart`、PM2 操作或站点目录同步。
-- ctdy123 网站代码本身的部署应使用独立 `ecs-user`、`/home/ecs-user/limereader` 和 `limereader-npm.service`；不得写入 z-pulse 的用户、目录或服务单元。
-- 首次部署发布 API 属于网站变更，应沿用 ctdy123 的备份、构建、健康检查和单服务回滚流程。
+- 当前 ctdy123 应用目录是 `/opt/limereader`，容器名是 `limereader-app`。不得把仓库里的旧 PM2 部署脚本用于这台共享 ECS。
+- 网站代码应先在本地完成生产构建，再上传到独立候选目录并用 `127.0.0.1` 临时端口验证。切换时只能重建 `limereader-app`，不得执行整组 `docker compose down/up`。
+- 切换前后都要记录 Redis、Vaultwarden 与 z-pulse 服务的容器/进程状态，并分别验证 `ctdy123.com`、`z-pulse.cn`。不得写入 z-pulse 的目录、服务单元或 Nginx 路由。
+- 首次部署发布 API 属于网站变更，必须保留 `/opt/limereader-backups/<commit>` 回滚副本；候选目录中的环境文件应在验证完成后删除。
 
 ## 回滚
 
