@@ -97,13 +97,15 @@ jobs:
           cmake --build build --config Release --parallel
           ctest --test-dir build --build-config Release --output-on-failure
 
-      - name: Ad-hoc sign macOS application bundle
-        if: runner.os == 'macOS'
-        run: codesign --force --deep --sign - build/LoimReader.app
-
       - name: Install
         shell: bash
         run: cmake --install build --config Release --prefix stage/LoimReader
+
+      - name: Verify installed macOS application signature
+        if: runner.os == 'macOS'
+        run: >-
+          codesign --verify --deep --strict --verbose=4
+          stage/LoimReader/LoimReader.app
 
       - name: Reject legacy Qt and Poppler files
         shell: bash
@@ -163,7 +165,20 @@ jobs:
 
       - name: Verify macOS disk image
         if: runner.os == 'macOS'
-        run: hdiutil verify "dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.dmg"
+        shell: bash
+        run: |
+          package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.dmg"
+          mount_point="$RUNNER_TEMP/loimreader-dmg"
+          hdiutil verify "$package"
+          mkdir -p "$mount_point"
+          hdiutil attach "$package" -nobrowse -readonly -mountpoint "$mount_point"
+          trap 'hdiutil detach "$mount_point"' EXIT
+          test -d "$mount_point/LoimReader.app"
+          test -L "$mount_point/Applications"
+          test -s "$mount_point/macOS 安装说明.txt"
+          codesign --verify --deep --strict --verbose=4 "$mount_point/LoimReader.app"
+          hdiutil detach "$mount_point"
+          trap - EXIT
 
       - uses: actions/upload-artifact@v4
         with:
@@ -237,6 +252,7 @@ jobs:
             dist/* SHA256SUMS loimreader.spdx.json release-manifest.json \
             release-manifest.sig release-manifest.sig.base64 \
             --target "$GITHUB_SHA" \
+            --notes "$(cat docs/install/MACOS.md)" \
             --generate-notes \
             --title "LoimReader $RELEASE_TAG"
 

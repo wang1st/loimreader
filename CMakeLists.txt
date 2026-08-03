@@ -202,6 +202,10 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         if(APPLE)
             set(LOIM_LICENSE_INSTALL_DIR
                 "LoimReader.app/Contents/Resources/licenses/LoimReader")
+            install(FILES
+                "${CMAKE_CURRENT_SOURCE_DIR}/packaging/macos/macOS 安装说明.txt"
+                DESTINATION .
+                COMPONENT Runtime)
         else()
             set(LOIM_LICENSE_INSTALL_DIR
                 "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader")
@@ -220,6 +224,32 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
             DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
             COMPONENT Runtime)
+        if(APPLE)
+            # Sign the installed bundle only after every resource has been
+            # copied into it. Signing the build-tree bundle earlier leaves the
+            # final DMG with an invalid resource seal.
+            install(CODE [[
+                set(_loim_app "$ENV{DESTDIR}${CMAKE_INSTALL_PREFIX}/LoimReader.app")
+                execute_process(
+                    COMMAND /usr/bin/codesign --force --deep --sign - "${_loim_app}"
+                    RESULT_VARIABLE _loim_sign_result
+                    ERROR_VARIABLE _loim_sign_error)
+                if(NOT _loim_sign_result EQUAL 0)
+                    message(FATAL_ERROR
+                        "Failed to ad-hoc sign ${_loim_app}: ${_loim_sign_error}")
+                endif()
+                execute_process(
+                    COMMAND /usr/bin/codesign --verify --deep --strict --verbose=2
+                        "${_loim_app}"
+                    RESULT_VARIABLE _loim_verify_result
+                    ERROR_VARIABLE _loim_verify_error)
+                if(NOT _loim_verify_result EQUAL 0)
+                    message(FATAL_ERROR
+                        "Installed macOS bundle failed signature verification: "
+                        "${_loim_verify_error}")
+                endif()
+            ]] COMPONENT Runtime)
+        endif()
     endif()
 
     if(BUILD_TESTING)

@@ -1,0 +1,40 @@
+LoimReader for macOS 安装说明（未签名测试版）
+================================================
+
+一、选择正确的安装包
+
+- Apple 芯片（M1、M2、M3、M4 等）：下载文件名含 macos_arm64 的 DMG。
+- Intel 芯片：下载文件名含 macos_amd64 的 DMG。
+- GitHub 页面底部的 Source code (tar.gz) 是源码压缩包，不是 macOS 安装包。
+
+二、安装
+
+1. 双击 LoimReader_*.dmg 打开磁盘映像。
+2. 将 LoimReader.app 拖到 Applications（应用程序）文件夹。
+3. 等待复制完成，然后在 Finder 中推出 LoimReader 磁盘映像。
+
+三、首次打开（当前版本尚未使用 Apple Developer ID 签名）
+
+1. 打开 Finder > 应用程序。
+2. 按住 Control 键点按 LoimReader，选择“打开”。
+3. 在弹出的确认框中再次选择“打开”。
+4. 如果仍被阻止，请打开“系统设置 > 隐私与安全”，在“安全性”区域找到
+   LoimReader 的拦截提示，选择“仍要打开”，按系统提示验证身份。
+
+四、仅当系统提示“应用已损坏”时
+
+请先确认安装包来自以下官方地址，并核对下载页公布的 SHA-256：
+
+https://ctdy123.com/download/loimreader
+https://github.com/wang1st/loimreader/releases
+
+然后打开“终端”，执行：
+
+xattr -dr com.apple.quarantine "/Applications/LoimReader.app"
+
+执行后回到 Finder，按住 Control 键点按 LoimReader，再选择“打开”。
+该命令只移除 LoimReader.app 的下载隔离属性，不会全局关闭 macOS 安全功能。
+
+五、卸载
+
+退出 LoimReader，然后将“应用程序”文件夹中的 LoimReader.app 移到废纸篓。
