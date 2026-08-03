@@ -37,14 +37,17 @@ jobs:
           fi
           gh release view "$RELEASE_TAG" --json isDraft --jq 'select(.isDraft == false) | true' | grep -qx true
 
-      - name: Download signed release metadata
+      - name: Download signed release and native installers
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           gh release download "$RELEASE_TAG" --pattern release-manifest.json
           gh release download "$RELEASE_TAG" --pattern release-manifest.sig.base64
+          mkdir -p dist
+          gh release download "$RELEASE_TAG" --pattern 'LoimReader_*' --dir dist
 
       - name: Publish and verify signed metadata
         env:
           CTDY123_RELEASE_TOKEN: ${{ secrets.CTDY123_RELEASE_TOKEN }}
+          ARTIFACT_DIR: dist
         run: ./scripts/register-ctdy123-release.sh

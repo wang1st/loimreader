@@ -9,8 +9,8 @@
 - A4 分页优先落在图片边界、空白行或人工指定位置，并允许用户拖动微调。
 - 提供预览、PDF 导出、打印、登录鉴权、自动更新和中英文界面。
 - Windows、Linux、macOS 均提供 amd64 和 arm64 产物。
-- GitHub 标签发布自动生成安装包、校验和、签名清单和 Release。
-- 发布成功后，通过 ctdy123.com 的受鉴权版本接口登记版本；不通过 SSH 改写共享 ECS。
+- GitHub 标签发布自动生成 MSI、DEB、DMG、校验和、签名清单和 Release。
+- 发布成功后，通过 ctdy123.com 的受鉴权版本接口上传到私有 OSS 并登记版本；不通过 SSH 改写共享 ECS。
 
 ### 非功能需求
 
@@ -81,8 +81,10 @@
 ### 更新与发布
 
 - 客户端只信任嵌入公钥签名的版本清单，并校验包的 SHA-256。
-- GitHub Actions 构建六个目标，生成 SBOM、校验和与 Ed25519 签名，再创建 GitHub Release。
-- ctdy123.com 发布 API 只更新 OSS 中的版本清单；它不部署网站代码，也不重启 Nginx 或 z-pulse 服务。
+- GitHub Actions 构建六个目标，生成 SBOM、SHA-256、兼容 MD5 与 Ed25519 签名，再创建 GitHub Release。
+- ctdy123.com 先签发短期 OSS 上传地址，再流式校验六个安装包，最后更新版本清单；它不部署网站代码，也不重启 Nginx 或 z-pulse 服务。
+- 下载页和新旧客户端只持有 `ctdy123.com/download/loimreader/...` 稳定地址；私有 OSS 地址按次短期签发。
+- 旧 Qt 的 `checksumMD5`、`updateUrl`、平台级 `packages` 和登录/心跳更新字段继续保留；新清单以 SHA-256 为主校验。
 
 ## 4. 数据流：批量导入与优雅切分
 
@@ -115,9 +117,9 @@
 
 | 平台 | amd64 | arm64 | 建议格式 |
 |---|---|---|---|
-| Windows | `windows-2025` | `windows-11-arm` | MSIX/ZIP |
-| Linux | `ubuntu-24.04` | `ubuntu-24.04-arm` | AppImage/TAR |
-| macOS | `macos-26-intel` | `macos-26` | DMG/ZIP |
+| Windows | `windows-2025` | `windows-11-arm` | MSI |
+| Linux | `ubuntu-24.04` | `ubuntu-24.04-arm` | DEB |
+| macOS | `macos-26-intel` | `macos-26` | DMG |
 
 GitHub 当前已为公开和私有仓库提供上述标准 arm64 标签；私有仓库会消耗账户的 Actions 分钟额度，公开仓库按 GitHub 的公开仓库计费规则运行。发布工作流固定具体运行器标签，避免 `latest` 迁移导致不可复现构建。
 
@@ -130,6 +132,7 @@ GitHub 当前已为公开和私有仓库提供上述标准 arm64 标签；私有
 | 找不到高质量空隙 | 可能切到内容 | 回退理想页高并显示可拖动分割线 |
 | 某架构构建失败 | 版本不完整 | 发布阶段要求六个构建全部成功 |
 | GitHub Release 成功、网站登记失败 | 新包存在但客户端看不到 | 重试幂等 API；旧清单保持有效 |
+| 安装包上传不完整或摘要不符 | 新版本不可下载 | 网站拒绝切换清单，重跑上传与登记 |
 | ctdy123 API Token 泄露 | 可伪造版本登记 | 环境级 Secret、最小权限、轮换、签名清单二次校验 |
 | ctdy123 服务故障 | 无法查询新版本 | OSS 清单缓存；客户端指数退避，不阻塞启动 |
 | 共享 ECS 操作误伤 z-pulse.cn | 两站同时中断 | 发布链路禁止 SSH/root；网站部署使用独立用户、目录和 systemd 单元 |
@@ -139,7 +142,7 @@ GitHub 当前已为公开和私有仓库提供上述标准 arm64 标签；私有
 1. 建立 `loim_core`、测试与六架构 CI；Qt 应用仍可通过显式开关构建。
 2. SDL3 窗口与批量选择接入核心，完成预览和分割线编辑。
 3. PDF 导出、平台打印、登录、更新检查迁移。
-4. 六平台安装包、签名、公证、SBOM 和自动版本登记进入灰度。
+4. 六平台安装包、签名、公证、SBOM、ctdy123 镜像和自动版本登记进入灰度。
 5. 功能与数据兼容验收后，停止发布 Qt 二进制；最后再移动或删除 legacy 源码。
 
 Qt 代码在迁移期间只用于行为对照，不进入 3.0 发布产物。许可结论需要由实际发行清单和法律顾问最终确认。

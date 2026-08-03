@@ -2,7 +2,7 @@
 
 ## 仓库设置
 
-1. 将本仓库迁移到 GitHub；当前标准运行器可直接使用 `ubuntu-24.04-arm`、`windows-11-arm`、`macos-26` 等六个标签，私有仓库会消耗账户的 Actions 分钟额度。
+1. 源码仓库当前保持公开；标准运行器直接使用 `ubuntu-24.04-arm`、`windows-11-arm`、`macos-26` 等六个标签。产品下载地址不依赖仓库可见性。
 2. 创建 GitHub Environment：`ctdy123-production`，启用人工审批和仅允许 `v3.*` 标签部署。
 3. 在 Repository Secrets 中配置：
    - `RELEASE_ED25519_PRIVATE_KEY`：32 字节 Ed25519 私钥的 64 位十六进制表示。
@@ -19,14 +19,23 @@
 
 1. `ci.yml` 在六个原生目标上编译、测试并保存短期构建产物。
 2. 推送 `v3.*` 标签触发 `release.yml`。
-3. 六个包全部成功后生成 schema v2 清单、SPDX 2.3 SBOM 和 SHA-256。
+3. 六个 MSI/DEB/DMG 全部成功后生成 schema v2 清单、SPDX 2.3 SBOM、SHA-256 和旧 Qt 兼容 MD5。
 4. 工作流用 Ed25519 私钥对清单原始字节签名，并创建不可变 GitHub Release。
-5. 生产 Environment 审批后，工作流将原清单和签名提交到 ctdy123.com。
-6. 网站验证 Token、签名、仓库、六目标、版本递增，再更新 OSS `updates/loimreader/version.json`。
-7. 工作流从公开版本查询接口回读版本号；不一致则整次发布失败。
+5. 生产 Environment 审批后，工作流将原清单和签名提交到 ctdy123.com，取得六个短期 OSS 上传地址。
+6. 工作流直传安装包到私有 OSS，不持有 OSS 长期密钥。
+7. 网站验证 Token、签名、仓库、六目标、版本递增，并流式复算大小、SHA-256、MD5；全部一致后才更新 `updates/loimreader/version.json`。
+8. 工作流从公开版本查询接口回读版本号和六个 ctdy123 下载地址，并实际跟随下载；不一致则整次发布失败。
 
 若 GitHub Release 已经创建、只有网站登记失败，运行
-`Retry ctdy123 release registration` 工作流并输入现有版本号。该工作流只下载已签名清单、幂等提交并轮询公开接口，不会重新构建六个平台安装包。
+`Retry ctdy123 release registration` 工作流并输入现有版本号。该工作流从 GitHub Release 下载已签名清单和六个安装包，幂等重传并轮询公开接口，不会重新构建。
+
+## 旧 Qt 升级兼容
+
+- `GET /api/update/check` 继续提供 `releases[].platforms[]`。
+- `POST /api/client/version/check` 继续提供 `hasUpdate` 和 `updateInfo`。
+- 登录与心跳响应继续提供 `updateUrl`、`updateSize`、`updateLog`、`checksumMD5`。
+- 旧请求未携带架构时，Windows/Linux 默认 amd64；历史 Qt macOS 包默认 arm64。
+- 用户下载和升级 URL 均为 `https://ctdy123.com/download/loimreader/...`，由网站跳转到短期私有 OSS 地址。
 
 ## 共享 ECS 隔离要求
 

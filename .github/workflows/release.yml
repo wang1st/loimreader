@@ -56,6 +56,16 @@ jobs:
             libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
             libxkbcommon-dev libdecor-0-dev
 
+      - name: Install pinned WiX Toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wixRoot = Join-Path $env:RUNNER_TEMP 'wix'
+          dotnet tool install --tool-path $wixRoot wix --version 4.0.6
+          & (Join-Path $wixRoot 'wix.exe') extension add --global WixToolset.UI.wixext/4.0.6
+          $wixRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "WIX=$wixRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
       - name: Resolve version
         shell: bash
         env:
@@ -77,6 +87,8 @@ jobs:
           -DBUILD_TESTING=ON
           -DLOIM_ENABLE_STRICT_WARNINGS=ON
           -DLOIM_VERSION_OVERRIDE="$RELEASE_VERSION"
+          -DLOIM_RELEASE_PLATFORM="${{ matrix.platform }}"
+          -DLOIM_RELEASE_ARCH="${{ matrix.arch }}"
           -DCMAKE_BUILD_TYPE=Release
 
       - name: Build and test
@@ -84,6 +96,10 @@ jobs:
         run: |
           cmake --build build --config Release --parallel
           ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Ad-hoc sign macOS application bundle
+        if: runner.os == 'macOS'
+        run: codesign --force --deep --sign - build/LoimReader.app
 
       - name: Install
         shell: bash
@@ -121,19 +137,33 @@ jobs:
           "-DLOIM_STAGE_ROOT=$env:GITHUB_WORKSPACE/stage/LoimReader"
           -P scripts/check-runtime-dependencies.cmake
 
-      - name: Package Unix
-        if: runner.os != 'Windows'
+      - name: Create native installer
         shell: bash
         run: |
           mkdir -p dist
-          tar -C stage -czf "dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.tar.gz" LoimReader
+          cpack --config build/CPackConfig.cmake -C Release -B dist
 
-      - name: Package Windows
-        if: runner.os == 'Windows'
-        shell: pwsh
+      - name: Validate native installer name and size
+        shell: bash
         run: |
-          New-Item -ItemType Directory -Force dist | Out-Null
-          Compress-Archive -Path stage/LoimReader -DestinationPath "dist/LoimReader_${env:RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.zip"
+          case "${{ matrix.platform }}" in
+            windows) extension=msi ;;
+            linux) extension=deb ;;
+            macos) extension=dmg ;;
+          esac
+          package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.${extension}"
+          test -s "$package"
+
+      - name: Inspect Debian package
+        if: runner.os == 'Linux'
+        run: |
+          package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.deb"
+          dpkg-deb --info "$package"
+          dpkg-deb --contents "$package" | grep -E '/(bin/LoimReader|share/licenses/LoimReader/)'
+
+      - name: Verify macOS disk image
+        if: runner.os == 'macOS'
+        run: hdiutil verify "dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.dmg"
 
       - uses: actions/upload-artifact@v4
         with:
@@ -224,9 +254,12 @@ jobs:
         run: |
           gh release download "$RELEASE_TAG" --pattern release-manifest.json
           gh release download "$RELEASE_TAG" --pattern release-manifest.sig.base64
+          mkdir -p dist
+          gh release download "$RELEASE_TAG" --pattern 'LoimReader_*' --dir dist
 
       - name: Publish and verify signed metadata
         env:
           CTDY123_RELEASE_TOKEN: ${{ secrets.CTDY123_RELEASE_TOKEN }}
           RELEASE_VERSION: ${{ needs.github-release.outputs.version }}
+          ARTIFACT_DIR: dist
         run: ./scripts/register-ctdy123-release.sh

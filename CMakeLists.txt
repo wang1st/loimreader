@@ -69,7 +69,9 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             target_link_options(loimreader-plan PRIVATE -municode)
         endif()
         loim_enable_strict_warnings(loimreader-plan)
-        install(TARGETS loimreader-plan RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+        install(TARGETS loimreader-plan
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+            COMPONENT CommandLine)
 
         if(BUILD_TESTING)
             set(LOIM_UTF8_TEST_IMAGE
@@ -195,19 +197,29 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         endif()
 
         install(TARGETS loimreader
-            BUNDLE DESTINATION .
-            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR})
+            BUNDLE DESTINATION . COMPONENT Runtime
+            RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR} COMPONENT Runtime)
+        if(APPLE)
+            set(LOIM_LICENSE_INSTALL_DIR
+                "LoimReader.app/Contents/Resources/licenses/LoimReader")
+        else()
+            set(LOIM_LICENSE_INSTALL_DIR
+                "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader")
+        endif()
         install(FILES
             "${sdl3_SOURCE_DIR}/LICENSE.txt"
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader"
-            RENAME SDL3-LICENSE.txt)
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            RENAME SDL3-LICENSE.txt
+            COMPONENT Runtime)
         install(FILES
             "${sdl3_image_SOURCE_DIR}/LICENSE.txt"
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader"
-            RENAME SDL3_image-LICENSE.txt)
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            RENAME SDL3_image-LICENSE.txt
+            COMPONENT Runtime)
         install(FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
-            DESTINATION "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader")
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            COMPONENT Runtime)
     endif()
 
     if(BUILD_TESTING)
@@ -231,15 +243,74 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         install(DIRECTORY include/loim/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/loim)
     endif()
 
+    set(LOIM_RELEASE_PLATFORM "" CACHE STRING
+        "Canonical release platform (windows, linux, or macos)")
+    set(LOIM_RELEASE_ARCH "" CACHE STRING
+        "Canonical release architecture (amd64 or arm64)")
+    if(NOT LOIM_RELEASE_PLATFORM)
+        if(WIN32)
+            set(LOIM_RELEASE_PLATFORM "windows")
+        elseif(APPLE)
+            set(LOIM_RELEASE_PLATFORM "macos")
+        else()
+            set(LOIM_RELEASE_PLATFORM "linux")
+        endif()
+    endif()
+    if(NOT LOIM_RELEASE_ARCH)
+        if(CMAKE_SYSTEM_PROCESSOR MATCHES "^(arm64|aarch64|ARM64)$")
+            set(LOIM_RELEASE_ARCH "arm64")
+        else()
+            set(LOIM_RELEASE_ARCH "amd64")
+        endif()
+    endif()
+    if(NOT LOIM_RELEASE_PLATFORM MATCHES "^(windows|linux|macos)$")
+        message(FATAL_ERROR "LOIM_RELEASE_PLATFORM is invalid: ${LOIM_RELEASE_PLATFORM}")
+    endif()
+    if(NOT LOIM_RELEASE_ARCH MATCHES "^(amd64|arm64)$")
+        message(FATAL_ERROR "LOIM_RELEASE_ARCH is invalid: ${LOIM_RELEASE_ARCH}")
+    endif()
+
     set(CPACK_PACKAGE_NAME "LoimReader")
     set(CPACK_PACKAGE_VENDOR "ctdy123.com")
+    set(CPACK_PACKAGE_CONTACT "ctdy123.com")
+    set(CPACK_PACKAGE_DESCRIPTION_SUMMARY
+        "LoimReader multi-image pagination desktop application")
+    set(CPACK_PACKAGE_HOMEPAGE_URL "https://ctdy123.com/download/loimreader")
     set(CPACK_PACKAGE_VERSION ${LOIM_VERSION_OVERRIDE})
+    set(CPACK_PACKAGE_INSTALL_DIRECTORY "LoimReader")
+    set(CPACK_PACKAGE_EXECUTABLES "LoimReader" "LoimReader")
+    set(CPACK_CREATE_DESKTOP_LINKS "LoimReader")
+    set(CPACK_COMPONENTS_ALL Runtime)
     set(CPACK_PACKAGE_FILE_NAME
-        "LoimReader_${LOIM_VERSION_OVERRIDE}_${CMAKE_SYSTEM_NAME}_${CMAKE_SYSTEM_PROCESSOR}")
+        "LoimReader_${LOIM_VERSION_OVERRIDE}_${LOIM_RELEASE_PLATFORM}_${LOIM_RELEASE_ARCH}")
+
     if(WIN32)
-        set(CPACK_GENERATOR "ZIP")
+        set(CPACK_GENERATOR "WIX")
+        set(CPACK_WIX_VERSION "4")
+        set(CPACK_WIX_UPGRADE_GUID "92464991-FFF2-44F3-82D9-5F5E84B3AD58")
+        set(CPACK_WIX_PRODUCT_ICON "${CMAKE_CURRENT_SOURCE_DIR}/icons/windows.ico")
+        set(CPACK_WIX_INSTALL_SCOPE "perMachine")
+        if(LOIM_RELEASE_ARCH STREQUAL "arm64")
+            set(CPACK_WIX_ARCHITECTURE "arm64")
+        else()
+            set(CPACK_WIX_ARCHITECTURE "x64")
+        endif()
+    elseif(APPLE)
+        set(CPACK_GENERATOR "DragNDrop")
+        set(CPACK_DMG_VOLUME_NAME "LoimReader ${LOIM_VERSION_OVERRIDE}")
+        set(CPACK_DMG_FORMAT "UDZO")
     else()
-        set(CPACK_GENERATOR "TGZ")
+        set(CPACK_GENERATOR "DEB")
+        set(CPACK_DEBIAN_PACKAGE_NAME "loimreader")
+        set(CPACK_DEBIAN_PACKAGE_MAINTAINER "ctdy123.com")
+        set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
+        set(CPACK_DEBIAN_PACKAGE_PRIORITY "optional")
+        set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${LOIM_RELEASE_ARCH}")
+        set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://ctdy123.com/download/loimreader")
+        set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+        string(REPLACE "-" "~" LOIM_DEBIAN_VERSION "${LOIM_VERSION_OVERRIDE}")
+        set(CPACK_DEBIAN_PACKAGE_VERSION "${LOIM_DEBIAN_VERSION}")
+        set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}.deb")
     endif()
     include(CPack)
 
