@@ -25,6 +25,9 @@
 6. 网站验证 Token、签名、仓库、六目标、版本递增，再更新 OSS `updates/loimreader/version.json`。
 7. 工作流从公开版本查询接口回读版本号；不一致则整次发布失败。
 
+若 GitHub Release 已经创建、只有网站登记失败，运行
+`Retry ctdy123 release registration` 工作流并输入现有版本号。该工作流只下载已签名清单、幂等提交并轮询公开接口，不会重新构建六个平台安装包。
+
 ## 共享 ECS 隔离要求
 
 - 此发布链路不需要 `CTDY123_ROOT_PASSWORD`、`ZPULSE_SERVER_ROOT_PASSWORD` 或 SSH 私钥。

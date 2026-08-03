@@ -1,0 +1,50 @@
+name: Retry ctdy123 release registration
+
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Existing GitHub release version, for example 3.0.0-alpha.1
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loimreader-production-release
+  cancel-in-progress: false
+
+jobs:
+  register:
+    name: Register existing release on ctdy123.com
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    environment: ctdy123-production
+    env:
+      RELEASE_VERSION: ${{ inputs.version }}
+      RELEASE_TAG: v${{ inputs.version }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Validate requested release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          if [[ ! "$RELEASE_VERSION" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $RELEASE_VERSION" >&2
+            exit 1
+          fi
+          gh release view "$RELEASE_TAG" --json isDraft --jq 'select(.isDraft == false) | true' | grep -qx true
+
+      - name: Download signed release metadata
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release download "$RELEASE_TAG" --pattern release-manifest.json
+          gh release download "$RELEASE_TAG" --pattern release-manifest.sig.base64
+
+      - name: Publish and verify signed metadata
+        env:
+          CTDY123_RELEASE_TOKEN: ${{ secrets.CTDY123_RELEASE_TOKEN }}
+        run: ./scripts/register-ctdy123-release.sh

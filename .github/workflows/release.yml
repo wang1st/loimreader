@@ -225,24 +225,8 @@ jobs:
           gh release download "$RELEASE_TAG" --pattern release-manifest.json
           gh release download "$RELEASE_TAG" --pattern release-manifest.sig.base64
 
-      - name: Publish signed metadata only
+      - name: Publish and verify signed metadata
         env:
           CTDY123_RELEASE_TOKEN: ${{ secrets.CTDY123_RELEASE_TOKEN }}
-        run: |
-          test -n "$CTDY123_RELEASE_TOKEN"
-          signature="$(cat release-manifest.sig.base64)"
-          curl --fail-with-body --retry 4 --retry-all-errors \
-            --request POST \
-            --header "Authorization: Bearer $CTDY123_RELEASE_TOKEN" \
-            --header "X-Release-Signature: $signature" \
-            --header "Content-Type: application/json" \
-            --header "Idempotency-Key: github-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}" \
-            --data-binary @release-manifest.json \
-            https://ctdy123.com/api/admin/versions/publish
-
-      - name: Verify public version endpoint
-        env:
           RELEASE_VERSION: ${{ needs.github-release.outputs.version }}
-        run: |
-          observed="$(curl --fail --retry 4 https://ctdy123.com/api/client/version/info/loimreader | jq -r .version)"
-          test "$observed" = "$RELEASE_VERSION"
+        run: ./scripts/register-ctdy123-release.sh
