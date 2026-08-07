@@ -99,7 +99,7 @@ jobs:
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends \
                 build-essential cmake git ca-certificates curl dpkg-dev \
-                python3 python3-pip \
+                file python3 python3-pip \
                 libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
                 libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
                 libxkbcommon-dev libcurl4-openssl-dev fonts-noto-cjk
