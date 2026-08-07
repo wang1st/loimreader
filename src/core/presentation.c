@@ -140,12 +140,42 @@ bool loim_export_default_path(
 
 uint32_t loim_a4_width_px(unsigned dpi)
 {
-    return dpi == 300U ? 2480U : (uint32_t)(((uint64_t)dpi * 210U + 127U) / 254U);
+    /* A4 width is 210 mm = 2100/254 in; dpi * in = px, rounded. */
+    return dpi == 300U ? 2480U : (uint32_t)(((uint64_t)dpi * 2100U + 127U) / 254U);
 }
 
 uint32_t loim_a4_height_px(unsigned dpi)
 {
-    return dpi == 300U ? 3508U : (uint32_t)(((uint64_t)dpi * 297U + 127U) / 254U);
+    /* A4 height is 297 mm = 2970/254 in; dpi * in = px, rounded. */
+    return dpi == 300U ? 3508U : (uint32_t)(((uint64_t)dpi * 2970U + 127U) / 254U);
+}
+
+unsigned loim_slice_effective_dpi(
+    uint32_t source_width_px,
+    uint32_t source_height_px,
+    float layout_width_px,
+    float layout_height_px,
+    unsigned current_dpi)
+{
+    float dpi_by_width;
+    float dpi_by_height;
+    float slice_dpi;
+    unsigned candidate;
+
+    if (!(layout_width_px > 0.0F) || !(layout_height_px > 0.0F)) {
+        return current_dpi;
+    }
+    dpi_by_width = (float)source_width_px * 300.0F / layout_width_px;
+    dpi_by_height = (float)source_height_px * 300.0F / layout_height_px;
+    slice_dpi = dpi_by_width < dpi_by_height ? dpi_by_width : dpi_by_height;
+    if (slice_dpi >= (float)current_dpi) {
+        return current_dpi;
+    }
+    candidate = (unsigned)slice_dpi;
+    if (candidate < 1U) {
+        return 1U;
+    }
+    return candidate;
 }
 
 unsigned loim_progress_percent(size_t completed, size_t total)

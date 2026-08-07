@@ -128,10 +128,28 @@ static void test_column_cycle_and_import_progress(void)
     CHECK(strcmp(export_path, "C:\\Pictures\\LoimReader.pdf") == 0);
     CHECK(loim_a4_width_px(300U) == 2480U);
     CHECK(loim_a4_height_px(300U) == 3508U);
+    /* A4 = 210x297 mm; px = dpi * mm / 25.4, rounded. */
+    CHECK(loim_a4_width_px(150U) == 1240U);
+    CHECK(loim_a4_height_px(150U) == 1754U);
+    CHECK(loim_a4_width_px(100U) == 827U);
+    CHECK(loim_a4_height_px(100U) == 1169U);
     CHECK(loim_progress_percent(0U, 0U) == 0U);
     CHECK(loim_progress_percent(1U, 3U) == 33U);
     CHECK(loim_progress_percent(3U, 3U) == 100U);
     CHECK(loim_progress_percent(4U, 3U) == 100U);
+    /* Effective DPI: source pixels mapped 1:1 on the layout rectangle. */
+    CHECK(loim_slice_effective_dpi(2480U, 3508U, 2480.0F, 3508.0F, 300U) == 300U);
+    CHECK(loim_slice_effective_dpi(1240U, 1754U, 2480.0F, 3508.0F, 300U) == 150U);
+    CHECK(loim_slice_effective_dpi(3000U, 5000U, 2480.0F, 3508.0F, 300U) == 300U);
+    CHECK(loim_slice_effective_dpi(2480U, 3508U, 2480.0F, 3508.0F, 200U) == 200U);
+    CHECK(loim_slice_effective_dpi(10U, 10U, 2480.0F, 3508.0F, 300U) == 1U);
+    CHECK(loim_slice_effective_dpi(100U, 100U, 2480.0F, 3508.0F, 300U) == 8U);
+    CHECK(loim_slice_effective_dpi(2480U, 3508U, 0.0F, 3508.0F, 100U) == 100U);
+    CHECK(loim_slice_effective_dpi(2480U, 3508U, 2480.0F, 0.0F, 100U) == 100U);
+    /* Width constraint binds when the source is wider than tall. */
+    CHECK(loim_slice_effective_dpi(1240U, 3000U, 2480.0F, 3508.0F, 300U) == 150U);
+    /* Height constraint binds when the source is taller than wide. */
+    CHECK(loim_slice_effective_dpi(2480U, 1754U, 2480.0F, 3508.0F, 300U) == 150U);
 }
 
 static void test_pdf_writer_creates_a_valid_document(void)
