@@ -209,6 +209,17 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         else()
             set(LOIM_LICENSE_INSTALL_DIR
                 "${CMAKE_INSTALL_DATADIR}/licenses/LoimReader")
+            # Linux desktop integration: menu and desktop launchers come from
+            # a freedesktop.org .desktop file plus an icon. CPACK_CREATE_DESKTOP_LINKS
+            # is a no-op for the DEB generator, so install them explicitly.
+            install(FILES
+                "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/LoimReader.desktop"
+                DESTINATION "${CMAKE_INSTALL_DATADIR}/applications"
+                COMPONENT Runtime)
+            install(FILES
+                "${CMAKE_CURRENT_SOURCE_DIR}/icons/loimreader.png"
+                DESTINATION "${CMAKE_INSTALL_DATADIR}/icons/hicolor/256x256/apps"
+                COMPONENT Runtime)
         endif()
         install(FILES
             "${sdl3_SOURCE_DIR}/LICENSE.txt"

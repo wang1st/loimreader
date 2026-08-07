@@ -212,7 +212,7 @@ jobs:
         run: |
           package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.deb"
           dpkg-deb --info "$package"
-          dpkg-deb --contents "$package" | grep -E '/(bin/LoimReader|share/licenses/LoimReader/)'
+          dpkg-deb --contents "$package" | grep -E '/(bin/LoimReader|share/licenses/LoimReader/|share/applications/LoimReader\.desktop|share/icons/hicolor/256x256/apps/loimreader\.png)'
 
       - name: Verify glibc requirement does not exceed 2.31
         if: runner.os == 'Linux'

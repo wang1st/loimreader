@@ -1,0 +1,11 @@
+[Desktop Entry]
+Type=Application
+Name=LoimReader
+GenericName=Long Image Pagination
+Comment=LoimReader multi-image pagination desktop application
+Exec=LoimReader
+Icon=loimreader
+Terminal=false
+Categories=Graphics;Office;Viewer;
+Keywords=long image;pdf;print;pagination;
+StartupNotify=true
