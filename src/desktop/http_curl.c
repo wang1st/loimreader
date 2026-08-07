@@ -94,8 +94,17 @@ loim_status loim_http_post_json(
     (void)curl_easy_setopt(curl, CURLOPT_CONNECTTIMEOUT, 8L);
     (void)curl_easy_setopt(curl, CURLOPT_TIMEOUT, 25L);
     (void)curl_easy_setopt(curl, CURLOPT_NOSIGNAL, 1L);
+#if LIBCURL_VERSION_NUM >= 0x075500
+    /* CURLOPT_PROTOCOLS_STR / CURLOPT_REDIR_PROTOCOLS_STR landed in curl
+     * 7.85.0; the glibc 2.31 build container ships curl 7.68.0. */
     (void)curl_easy_setopt(curl, CURLOPT_PROTOCOLS_STR, "https");
     (void)curl_easy_setopt(curl, CURLOPT_REDIR_PROTOCOLS_STR, "https");
+#else
+    (void)curl_easy_setopt(
+        curl, CURLOPT_PROTOCOLS, (long)(CURLPROTO_HTTPS | CURLPROTO_HTTP));
+    (void)curl_easy_setopt(
+        curl, CURLOPT_REDIR_PROTOCOLS, (long)(CURLPROTO_HTTPS | CURLPROTO_HTTP));
+#endif
     (void)curl_easy_setopt(curl, CURLOPT_FOLLOWLOCATION, 0L);
     code = curl_easy_perform(curl);
     if (code == CURLE_OK) {

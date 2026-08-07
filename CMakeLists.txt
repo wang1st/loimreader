@@ -64,6 +64,13 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         VERSION ${PROJECT_VERSION}
         SOVERSION ${PROJECT_VERSION_MAJOR}
     )
+    if(MSVC)
+        # The MSVC CRT flags fopen and friends as deprecated (C4996); the
+        # bundled SDL and core sources use the portable C99 fopen API, so
+        # silence that diagnostic at the target level instead of rewriting
+        # every call site to fopen_s/_wfopen_s.
+        target_compile_definitions(loim_core PRIVATE _CRT_SECURE_NO_WARNINGS)
+    endif()
 
     loim_enable_strict_warnings(loim_core)
 
