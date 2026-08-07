@@ -15,6 +15,8 @@ const char *loim_status_string(loim_status status)
         return "unsupported image format";
     case LOIM_ERROR_CORRUPT_IMAGE:
         return "corrupt image";
+    case LOIM_ERROR_INVALID_DATA:
+        return "invalid data";
     case LOIM_ERROR_OVERFLOW:
         return "integer overflow";
     case LOIM_ERROR_NOT_FOUND:

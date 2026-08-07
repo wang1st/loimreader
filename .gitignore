@@ -115,3 +115,9 @@ secrets.json
 .env
 .env.*
 !.env.example
+
+# Local assets and build leftovers (not part of the c17-rebuild source tree)
+CMakeFiles/
+LoimReader.pdf
+sample.png
+截屏/

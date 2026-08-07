@@ -17,6 +17,22 @@ LoimReader 3.0 的新发行链路使用下列宽松许可组件。Qt、Poppler-Q
 - 许可：zlib License
 - 完整许可文本：安装包中的 `SDL3_image-LICENSE.txt`
 
+## SDL_ttf 3.2.2
+
+- 来源：https://github.com/libsdl-org/SDL_ttf
+- 固定提交：`a1ce3670aec736ecbf0936c43f2f0cc53aa61e5b`
+- 许可：zlib License
+- 完整许可文本：安装包中的 `SDL3_ttf-LICENSE.txt`
+
+## FreeType 2.13.2
+
+SDL_ttf 在本项目中静态使用其随附的 FreeType 字体渲染后端。
+
+- 来源：https://gitlab.freedesktop.org/freetype/freetype
+- 固定提交：`9973564cfa63763a3e4ac67c09147899539b1e07`
+- 许可：FreeType Project License
+- 完整许可文本：安装包中的 `FreeType-LICENSE.txt`
+
 ## stb_image 2.30
 
 SDL_image 在本项目的 PNG/JPEG 解码后端中使用 `stb_image`。

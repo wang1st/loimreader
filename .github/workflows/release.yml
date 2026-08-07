@@ -29,7 +29,10 @@ jobs:
             runner: ubuntu-24.04
           - platform: linux
             arch: arm64
-            runner: ubuntu-24.04-arm
+            # GitHub's ARM64 hosted runners do not support Docker containers.
+            # Linux builds therefore run inside a glibc 2.31 (ubuntu:20.04)
+            # container on the x64 runner, with QEMU emulation for arm64.
+            runner: ubuntu-24.04
           - platform: windows
             arch: amd64
             runner: windows-2025
@@ -46,15 +49,6 @@ jobs:
     runs-on: ${{ matrix.runner }}
     steps:
       - uses: actions/checkout@v6
-
-      - name: Install Linux desktop headers
-        if: runner.os == 'Linux'
-        run: |
-          sudo apt-get update
-          sudo apt-get install --yes \
-            libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
-            libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
-            libxkbcommon-dev libdecor-0-dev
 
       - name: Install pinned WiX Toolset
         if: runner.os == 'Windows'
@@ -78,7 +72,61 @@ jobs:
           fi
           echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
 
+      - name: Set up QEMU for arm64 container build
+        if: runner.os == 'Linux' && matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+
+      # Linux release packages must run on Kylin / UOS desktops, whose glibc
+      # is at most 2.31. Building on ubuntu-24.04 (glibc 2.39) produces
+      # binaries those systems reject. Build inside an ubuntu:20.04 container
+      # (glibc 2.31) instead so the .deb links only GLIBC_2.31 symbols.
+      - name: Build, test and package in glibc 2.31 container
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          docker run --rm \
+            --platform "linux/${{ matrix.arch }}" \
+            --workdir /workspace \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --env RELEASE_VERSION="$RELEASE_VERSION" \
+            --env PLATFORM="${{ matrix.platform }}" \
+            --env ARCH="${{ matrix.arch }}" \
+            ubuntu:20.04 \
+            bash -euxo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                build-essential cmake git ca-certificates curl dpkg-dev \
+                file python3 python3-pip \
+                libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+                libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+                libxkbcommon-dev libcurl4-openssl-dev fonts-noto-cjk
+              # ubuntu 20.04 ships cmake 3.16; this project requires >= 3.25.
+              python3 -m pip install --no-cache-dir cmake
+              export PATH="/usr/local/bin:$PATH"
+              cmake -S . -B build \
+                -DLOIM_BUILD_LEGACY_QT=OFF \
+                -DLOIM_BUILD_DESKTOP=ON \
+                -DBUILD_TESTING=ON \
+                -DLOIM_ENABLE_STRICT_WARNINGS=ON \
+                -DLOIM_VERSION_OVERRIDE="$RELEASE_VERSION" \
+                -DLOIM_RELEASE_PLATFORM="$PLATFORM" \
+                -DLOIM_RELEASE_ARCH="$ARCH" \
+                -DCMAKE_BUILD_TYPE=Release
+              cmake --build build --config Release --parallel
+              ctest --test-dir build --build-config Release --output-on-failure
+              cmake --install build --config Release --prefix stage/LoimReader
+              mkdir -p dist
+              cpack --config build/CPackConfig.cmake -C Release -B dist
+              # Files created by the container (root) must stay readable by the
+              # runner user for later audit/upload steps.
+              chmod -R a+rX /workspace/stage /workspace/dist
+            '
+
       - name: Configure
+        if: runner.os != 'Linux'
         shell: bash
         run: >-
           cmake -S . -B build
@@ -92,12 +140,14 @@ jobs:
           -DCMAKE_BUILD_TYPE=Release
 
       - name: Build and test
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           cmake --build build --config Release --parallel
           ctest --test-dir build --build-config Release --output-on-failure
 
       - name: Install
+        if: runner.os != 'Linux'
         shell: bash
         run: cmake --install build --config Release --prefix stage/LoimReader
 
@@ -140,6 +190,7 @@ jobs:
           -P scripts/check-runtime-dependencies.cmake
 
       - name: Create native installer
+        if: runner.os != 'Linux'
         shell: bash
         run: |
           mkdir -p dist
@@ -162,6 +213,22 @@ jobs:
           package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.deb"
           dpkg-deb --info "$package"
           dpkg-deb --contents "$package" | grep -E '/(bin/LoimReader|share/licenses/LoimReader/)'
+
+      - name: Verify glibc requirement does not exceed 2.31
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          binary="stage/LoimReader/bin/LoimReader"
+          echo "GLIBC_ symbols required by $binary:"
+          objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sort -Vu
+          max_glibc="$(objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sed 's/^GLIBC_//' | sort -V | tail -1)"
+          echo "Highest required glibc: ${max_glibc}"
+          # Target desktops (Kylin / UOS) provide glibc up to 2.31.
+          if [[ "$(printf '%s\n2.31' "$max_glibc" | sort -V | tail -1)" != "2.31" ]]; then
+            echo "ERROR: binary requires glibc ${max_glibc}, above the 2.31 ceiling" >&2
+            exit 1
+          fi
+          echo "glibc compatibility check passed (<= 2.31)"
 
       - name: Verify macOS disk image
         if: runner.os == 'macOS'
