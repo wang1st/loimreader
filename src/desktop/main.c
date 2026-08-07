@@ -1351,7 +1351,9 @@ static void app_pdf_stamp_surface(
     const SDL_Surface *surface,
     int destination_x,
     int destination_y,
-    unsigned opacity)
+    unsigned opacity,
+    uint32_t canvas_width,
+    uint32_t canvas_height)
 {
     int y;
 
@@ -1369,34 +1371,41 @@ static void app_pdf_stamp_surface(
             uint8_t pixel[4];
 
             if (output_x < 0 || output_y < 0 ||
-                output_x >= (int)LOIM_PDF_WIDTH || output_y >= (int)LOIM_PDF_HEIGHT) {
+                output_x >= (int)canvas_width || output_y >= (int)canvas_height) {
                 continue;
             }
             memcpy(pixel, source + (size_t)x * 4U, sizeof(pixel));
             pixel[3] = (uint8_t)((unsigned)pixel[3] * opacity / 255U);
             app_pdf_blend_pixel(
-                rgb + ((size_t)output_y * LOIM_PDF_WIDTH + (size_t)output_x) * 3U,
+                rgb + ((size_t)output_y * canvas_width + (size_t)output_x) * 3U,
                 pixel);
         }
     }
 }
 
-static void app_pdf_apply_watermark(app_state *app, uint8_t *rgb)
+static void app_pdf_apply_watermark(
+    app_state *app,
+    uint8_t *rgb,
+    uint32_t canvas_width,
+    uint32_t canvas_height)
 {
     SDL_Color gray = {150U, 150U, 150U, 255U};
+    const float scale = (float)canvas_width / (float)LOIM_PDF_WIDTH;
     SDL_Surface *text = app_pdf_text_surface(
-        app, "影谷长图阅读器 ctdy123.com", 34.0F, gray);
+        app, "影谷长图阅读器 ctdy123.com",
+        (34.0F * scale < 8.0F ? 8.0F : 34.0F * scale), gray);
     int y;
 
     if (text == NULL) {
         return;
     }
-    for (y = 280; y < (int)LOIM_PDF_HEIGHT; y += 480) {
+    for (y = (int)(280.0F * scale); y < (int)canvas_height; y += (int)(480.0F * scale)) {
         int x;
-        int offset = ((y / 480) % 2) * 260;
+        int offset = ((y / (int)(480.0F * scale)) % 2) * (int)(260.0F * scale);
 
-        for (x = -260 + offset; x < (int)LOIM_PDF_WIDTH; x += 760) {
-            app_pdf_stamp_surface(rgb, text, x, y, 92U);
+        for (x = (int)(-260.0F * scale) + offset; x < (int)canvas_width;
+             x += (int)(760.0F * scale)) {
+            app_pdf_stamp_surface(rgb, text, x, y, 92U, canvas_width, canvas_height);
         }
     }
     SDL_DestroySurface(text);
@@ -1406,25 +1415,31 @@ static void app_pdf_apply_page_number(
     app_state *app,
     uint8_t *rgb,
     size_t page_number,
-    float margin_ratio)
+    float margin_ratio,
+    uint32_t canvas_width,
+    uint32_t canvas_height)
 {
     char number[32];
     SDL_Color gray = {110U, 110U, 110U, 255U};
     SDL_Surface *text;
-    int margin_x = (int)((float)LOIM_PDF_WIDTH * margin_ratio);
-    int margin_y = (int)((float)LOIM_PDF_HEIGHT * margin_ratio);
+    int margin_x = (int)((float)canvas_width * margin_ratio);
+    int margin_y = (int)((float)canvas_height * margin_ratio);
+    float scale = (float)canvas_width / (float)LOIM_PDF_WIDTH;
 
     (void)snprintf(number, sizeof(number), "%zu", page_number);
-    text = app_pdf_text_surface(app, number, 30.0F, gray);
+    text = app_pdf_text_surface(
+        app, number, (30.0F * scale < 8.0F ? 8.0F : 30.0F * scale), gray);
     if (text == NULL) {
         return;
     }
     app_pdf_stamp_surface(
         rgb,
         text,
-        (int)LOIM_PDF_WIDTH - margin_x - text->w,
-        (int)LOIM_PDF_HEIGHT - margin_y - text->h,
-        255U);
+        (int)canvas_width - margin_x - text->w,
+        (int)canvas_height - margin_y - text->h,
+        255U,
+        canvas_width,
+        canvas_height);
     SDL_DestroySurface(text);
 }
 
@@ -1497,6 +1512,68 @@ static bool app_grid_destination(
     return true;
 }
 
+/*
+ * Compute the effective output DPI for the whole document.
+ *
+ * A fixed 300 DPI canvas (2480 x 3508 px for A4) upscales low-resolution
+ * source images, which adds no real detail and only inflates the file.
+ * Instead, for every slice we derive the DPI at which the source pixels
+ * would be printed at their layout size, take the most constrained slice
+ * as the document DPI, and cap it at 300.
+ */
+static unsigned app_effective_pdf_dpi(
+    const app_state *app,
+    size_t columns,
+    float margin_ratio)
+{
+    const float margin_x = (float)LOIM_PDF_WIDTH * margin_ratio;
+    const float margin_y = (float)LOIM_PDF_HEIGHT * margin_ratio;
+    const float gap = (float)LOIM_PDF_WIDTH * LOIM_GRID_GAP_RATIO;
+    const float content_width = (float)LOIM_PDF_WIDTH - margin_x * 2.0F;
+    const float content_height = (float)LOIM_PDF_HEIGHT - margin_y * 2.0F;
+    const float cell_width = (content_width - gap * (float)(columns - 1U)) /
+        (float)columns;
+    const unsigned max_dpi = 300U;
+    unsigned effective = max_dpi;
+    size_t sheet_count = loim_sheet_count(app->layout.slice_count, columns);
+    size_t sheet_index;
+
+    if (sheet_count == 0U) {
+        return max_dpi;
+    }
+    for (sheet_index = 0U; sheet_index < sheet_count; ++sheet_index) {
+        size_t slot;
+
+        for (slot = 0U; slot < columns * columns; ++slot) {
+            size_t slice_index = loim_sheet_slice_index(sheet_index, columns, slot);
+            const loim_page_slice *slice = app_slice_at(app, slice_index);
+            const app_image *image;
+            SDL_FRect destination;
+
+            if (slice == NULL) {
+                continue;
+            }
+            if (!app_grid_destination(
+                    app,
+                    sheet_index,
+                    columns,
+                    slot,
+                    margin_x + (cell_width + gap) * (float)loim_sheet_slot_column(columns, slot),
+                    margin_y,
+                    cell_width,
+                    content_height,
+                    &destination)) {
+                continue;
+            }
+            image = &app->images[slice->source_index];
+            effective = loim_slice_effective_dpi(
+                image->width, slice->source_height_px, destination.w,
+                destination.h, effective);
+        }
+    }
+    return effective;
+}
+
 static void app_pdf_copy_slice(
     uint8_t *rgb,
     SDL_Surface *source,
@@ -1509,7 +1586,8 @@ static void app_pdf_copy_slice(
     unsigned clip_x,
     unsigned clip_y,
     unsigned clip_width,
-    unsigned clip_height)
+    unsigned clip_height,
+    uint32_t canvas_width)
 {
     unsigned y;
     unsigned x;
@@ -1526,7 +1604,7 @@ static void app_pdf_copy_slice(
         unsigned out_y = destination_y + y;
         if (out_y < clip_y || out_y >= clip_y + clip_height) continue;
         uint8_t *destination = rgb +
-            ((size_t)out_y * LOIM_PDF_WIDTH + destination_x) * 3U;
+            ((size_t)out_y * canvas_width + destination_x) * 3U;
 
         for (x = 0U; x < destination_width; ++x) {
             unsigned out_x = destination_x + x;
@@ -1545,20 +1623,22 @@ static loim_status app_render_pdf_sheet(
     size_t sheet_index,
     size_t columns,
     float margin_ratio,
+    uint32_t canvas_width,
+    uint32_t canvas_height,
     uint8_t *rgb)
 {
-    const float margin_x = (float)LOIM_PDF_WIDTH * margin_ratio;
-    const float margin_y = (float)LOIM_PDF_HEIGHT * margin_ratio;
-    const float gap = (float)LOIM_PDF_WIDTH * LOIM_GRID_GAP_RATIO;
-    const float content_width = (float)LOIM_PDF_WIDTH - margin_x * 2.0F;
-    const float content_height = (float)LOIM_PDF_HEIGHT - margin_y * 2.0F;
+    const float margin_x = (float)canvas_width * margin_ratio;
+    const float margin_y = (float)canvas_height * margin_ratio;
+    const float gap = (float)canvas_width * LOIM_GRID_GAP_RATIO;
+    const float content_width = (float)canvas_width - margin_x * 2.0F;
+    const float content_height = (float)canvas_height - margin_y * 2.0F;
     const float cell_width = (content_width - gap * (float)(columns - 1U)) /
         (float)columns;
     size_t slot;
     size_t cached_source = SIZE_MAX;
     SDL_Surface *cached_surface = NULL;
 
-    app_pdf_fill_white(rgb, (size_t)LOIM_PDF_WIDTH * LOIM_PDF_HEIGHT * 3U);
+    app_pdf_fill_white(rgb, (size_t)canvas_width * canvas_height * 3U);
     for (slot = 0U; slot < columns * columns; ++slot) {
         size_t slice_index = loim_sheet_slice_index(sheet_index, columns, slot);
         const loim_page_slice *slice = app_slice_at(app, slice_index);
@@ -1606,7 +1686,8 @@ static loim_status app_render_pdf_sheet(
             (unsigned)(margin_x + (cell_width + gap) * (float)column),
             (unsigned)margin_y,
             (unsigned)cell_width,
-            (unsigned)content_height);
+            (unsigned)content_height,
+            canvas_width);
     }
     SDL_DestroySurface(cached_surface);
     return LOIM_OK;
@@ -1623,7 +1704,10 @@ static loim_status app_export_pdf(
     loim_pdf_rgb_page *pages = NULL;
     columns = loim_columns_normalize(columns);
     size_t sheet_count = loim_sheet_count(app->layout.slice_count, columns);
-    size_t page_bytes = (size_t)LOIM_PDF_WIDTH * LOIM_PDF_HEIGHT * 3U;
+    unsigned export_dpi = app_effective_pdf_dpi(app, columns, margin_ratio);
+    uint32_t canvas_width = loim_a4_width_px(export_dpi);
+    uint32_t canvas_height = loim_a4_height_px(export_dpi);
+    size_t page_bytes = (size_t)canvas_width * canvas_height * 3U;
     loim_status status = LOIM_OK;
     size_t index;
 
@@ -1638,8 +1722,8 @@ static loim_status app_export_pdf(
         return LOIM_ERROR_OUT_OF_MEMORY;
     }
     for (index = 0U; index < sheet_count; ++index) {
-        pages[index].width_px = LOIM_PDF_WIDTH;
-        pages[index].height_px = LOIM_PDF_HEIGHT;
+        pages[index].width_px = canvas_width;
+        pages[index].height_px = canvas_height;
         pages[index].media_width_pt = 595U;
         pages[index].media_height_pt = 842U;
         pages[index].rgb = SDL_malloc(page_bytes);
@@ -1648,16 +1732,19 @@ static loim_status app_export_pdf(
             break;
         }
         status = app_render_pdf_sheet(
-            app, index, columns, margin_ratio, (uint8_t *)pages[index].rgb);
+            app, index, columns, margin_ratio, canvas_width, canvas_height,
+            (uint8_t *)pages[index].rgb);
         if (status != LOIM_OK) {
             break;
         }
         if (loim_export_page_requires_watermark(licensed, columns, index)) {
-            app_pdf_apply_watermark(app, (uint8_t *)pages[index].rgb);
+            app_pdf_apply_watermark(
+                app, (uint8_t *)pages[index].rgb, canvas_width, canvas_height);
         }
         if (show_page_numbers) {
             app_pdf_apply_page_number(
-                app, (uint8_t *)pages[index].rgb, index + 1U, margin_ratio);
+                app, (uint8_t *)pages[index].rgb, index + 1U, margin_ratio,
+                canvas_width, canvas_height);
         }
     }
     if (status == LOIM_OK) {

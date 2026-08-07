@@ -28,6 +28,19 @@ bool loim_export_default_path(
     size_t output_capacity);
 uint32_t loim_a4_width_px(unsigned dpi);
 uint32_t loim_a4_height_px(unsigned dpi);
+/*
+ * Compute the DPI at which a slice would be printed if its source pixels were
+ * mapped 1:1 onto the layout rectangle (measured on the 300 DPI reference
+ * canvas). Takes the minimum of the current document DPI and this slice's
+ * width/height-constrained DPI, clamped to a floor of 1. A zero-size layout
+ * rectangle leaves `current_dpi` unchanged.
+ */
+unsigned loim_slice_effective_dpi(
+    uint32_t source_width_px,
+    uint32_t source_height_px,
+    float layout_width_px,
+    float layout_height_px,
+    unsigned current_dpi);
 unsigned loim_progress_percent(size_t completed, size_t total);
 
 #ifdef __cplusplus
