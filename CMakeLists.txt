@@ -35,11 +35,18 @@ if(NOT LOIM_BUILD_LEGACY_QT)
     endfunction()
 
     add_library(loim_core
+        src/core/auth.c
         src/core/document.c
         src/core/image_probe.c
+        src/core/import_queue.c
+        src/core/i18n.c
         src/core/layout.c
+        src/core/machine_code.c
+        src/core/pdf.c
+        src/core/presentation.c
         src/core/seam.c
         src/core/status.c
+        src/core/texture_plan.c
     )
     add_library(LoimReader::Core ALIAS loim_core)
 
@@ -157,10 +164,36 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         )
         FetchContent_MakeAvailable(SDL3_image)
 
+        set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
+        set(SDLTTF_SAMPLES OFF CACHE BOOL "" FORCE)
+        set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
+        set(SDLTTF_HARFBUZZ OFF CACHE BOOL "" FORCE)
+        set(SDLTTF_PLUTOSVG OFF CACHE BOOL "" FORCE)
+        find_package(Git REQUIRED)
+        FetchContent_Declare(
+            SDL3_ttf
+            GIT_REPOSITORY https://github.com/libsdl-org/SDL_ttf.git
+            GIT_TAG a1ce3670aec736ecbf0936c43f2f0cc53aa61e5b
+            GIT_SHALLOW FALSE
+            GIT_SUBMODULES external/freetype
+            GIT_SUBMODULES_RECURSE TRUE
+            PATCH_COMMAND
+                "${CMAKE_COMMAND}"
+                "-DSOURCE_DIR=<SOURCE_DIR>"
+                "-DPATCH_FILE=${CMAKE_CURRENT_SOURCE_DIR}/cmake/patches/sdl3_ttf-null-glyph-buffer.patch"
+                -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/ApplySDL3TtfPatch.cmake"
+        )
+        FetchContent_MakeAvailable(SDL3_ttf)
+
         if(WIN32)
-            add_executable(loimreader WIN32 src/desktop/main.c app.rc)
+            set(LOIM_HTTP_SOURCE src/desktop/http_winhttp.c)
+            add_executable(loimreader WIN32
+                src/desktop/main.c ${LOIM_HTTP_SOURCE} app.rc)
         elseif(APPLE)
-            add_executable(loimreader MACOSX_BUNDLE src/desktop/main.c icons/macos.icns)
+            find_package(CURL REQUIRED)
+            set(LOIM_HTTP_SOURCE src/desktop/http_curl.c)
+            add_executable(loimreader MACOSX_BUNDLE
+                src/desktop/main.c ${LOIM_HTTP_SOURCE} icons/macos.icns)
             set_source_files_properties(icons/macos.icns PROPERTIES
                 MACOSX_PACKAGE_LOCATION Resources)
             set_target_properties(loimreader PROPERTIES
@@ -171,7 +204,9 @@ if(NOT LOIM_BUILD_LEGACY_QT)
                 MACOSX_BUNDLE_ICON_FILE "macos.icns"
             )
         else()
-            add_executable(loimreader src/desktop/main.c)
+            find_package(CURL REQUIRED)
+            set(LOIM_HTTP_SOURCE src/desktop/http_curl.c)
+            add_executable(loimreader src/desktop/main.c ${LOIM_HTTP_SOURCE})
         endif()
         target_compile_features(loimreader PRIVATE c_std_17)
         target_compile_definitions(loimreader PRIVATE
@@ -180,7 +215,18 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             LoimReader::Core
             SDL3::SDL3
             SDL3_image::SDL3_image
+            SDL3_ttf::SDL3_ttf
         )
+        if(APPLE)
+            target_link_libraries(loimreader PRIVATE
+                CURL::libcurl
+                "-framework CoreFoundation"
+                "-framework IOKit")
+        elseif(WIN32)
+            target_link_libraries(loimreader PRIVATE advapi32 winhttp)
+        else()
+            target_link_libraries(loimreader PRIVATE CURL::libcurl)
+        endif()
         set_target_properties(loimreader PROPERTIES
             C_EXTENSIONS OFF
             OUTPUT_NAME "LoimReader"
@@ -232,6 +278,16 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             RENAME SDL3_image-LICENSE.txt
             COMPONENT Runtime)
         install(FILES
+            "${sdl3_ttf_SOURCE_DIR}/LICENSE.txt"
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            RENAME SDL3_ttf-LICENSE.txt
+            COMPONENT Runtime)
+        install(FILES
+            "${sdl3_ttf_SOURCE_DIR}/external/freetype/docs/FTL.TXT"
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            RENAME FreeType-LICENSE.txt
+            COMPONENT Runtime)
+        install(FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
             DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
             COMPONENT Runtime)
@@ -272,6 +328,13 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         set_target_properties(loim_core_tests PROPERTIES C_EXTENSIONS OFF)
         loim_enable_strict_warnings(loim_core_tests)
         add_test(NAME loim_core_tests COMMAND loim_core_tests)
+
+        add_executable(loim_desktop_model_tests tests/test_desktop_model.c)
+        target_compile_features(loim_desktop_model_tests PRIVATE c_std_17)
+        target_link_libraries(loim_desktop_model_tests PRIVATE LoimReader::Core)
+        set_target_properties(loim_desktop_model_tests PROPERTIES C_EXTENSIONS OFF)
+        loim_enable_strict_warnings(loim_desktop_model_tests)
+        add_test(NAME loim_desktop_model_tests COMMAND loim_desktop_model_tests)
     endif()
 
     if(LOIM_INSTALL_DEVELOPMENT)
@@ -349,6 +412,7 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${LOIM_RELEASE_ARCH}")
         set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://ctdy123.com/download/loimreader")
         set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
+        set(CPACK_DEBIAN_PACKAGE_DEPENDS "fonts-noto-cjk, cups-client")
         string(REPLACE "-" "~" LOIM_DEBIAN_VERSION "${LOIM_VERSION_OVERRIDE}")
         set(CPACK_DEBIAN_PACKAGE_VERSION "${LOIM_DEBIAN_VERSION}")
         set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}.deb")

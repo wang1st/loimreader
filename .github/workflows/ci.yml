@@ -46,7 +46,8 @@ jobs:
           sudo apt-get install --yes \
             libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
             libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
-            libxkbcommon-dev libdecor-0-dev
+            libxkbcommon-dev libdecor-0-dev libcurl4-openssl-dev \
+            fonts-noto-cjk
 
       - name: Configure
         run: >-
