@@ -1,0 +1,141 @@
+LoimReader 最终用户许可协议
+LoimReader End User License Agreement
+
+生效日期：2026年8月12日
+Effective date: August 12, 2026
+
+重要提示
+
+请在安装或使用 LoimReader 前仔细阅读本协议。点击“我接受”、继续安装、登录或使用本软件，即表示您已经阅读、理解并同意受本协议约束。如果您不同意本协议，请停止安装并删除本软件。
+
+1. 协议主体与软件
+
+本协议由您与 CTDY123.COM（以下简称“许可方”）订立。“LoimReader”包括由许可方提供的官方桌面程序、安装包、更新、文档以及与其配套的账号验证和升级服务。
+
+2. 许可授予
+
+在您遵守本协议、网站服务条款和适用订阅规则的前提下，许可方授予您一项有限的、非独占的、不可转让、不可再许可的许可，允许您在自己控制的兼容设备上安装和使用 LoimReader。免费功能、未注册功能、付费功能、设备数量及订阅期限以软件界面和 CTDY123.COM 当时公布的规则为准。
+
+3. 账号与订阅
+
+需要登录或订阅的功能仅供相应账号持有人使用。您应妥善保管登录凭据，不得出售、出租、共享或以其他方式向无权人员提供账号或订阅权益。因您未妥善保管账号造成的损失由您承担。付款、续费、退款和订阅终止适用 CTDY123.COM 公布的服务条款。
+
+4. 用户内容
+
+您保留对导入图片、导出 PDF 和其他用户内容依法享有的权利。LoimReader 不因处理这些内容而取得其所有权。您保证自己有权处理相关内容，并不得使用本软件侵犯他人的著作权、隐私权、商业秘密或其他合法权益。
+
+5. 使用限制
+
+除适用法律明确允许且不得通过合同排除的情形外，您不得：
+
+（1）规避、破坏或干扰登录、订阅、设备限制、水印、升级校验或其他授权机制；
+（2）对官方二进制程序进行反向工程、反编译、反汇编或制作派生产品；
+（3）移除或篡改版权、商标、许可或来源标识；
+（4）出售、出租、再许可、托管或向第三方提供本软件本身；
+（5）利用本软件实施违法、侵权、欺诈、恶意攻击或破坏服务稳定性的行为。
+
+6. 源代码与第三方组件
+
+公开访问源代码不当然构成开源许可，也不授予本协议之外的权利；只有明确附带的许可证才产生相应授权。LoimReader 使用的 SDL、SDL_image、SDL_ttf、stb 等第三方组件继续适用其各自许可证。第三方许可证与本协议冲突时，仅就相应第三方组件以其许可证为准。
+
+7. 知识产权
+
+除本协议明确授予的有限使用权外，LoimReader、产品名称、图标、界面、文档、服务及相关知识产权均由许可方或相应权利人保留。本协议不转让任何所有权、商标权或其他知识产权。
+
+8. 更新与在线服务
+
+本软件可以连接 CTDY123.COM 检查更新、验证账号或订阅状态并提供下载。更新可能修复问题、提升安全性、调整兼容性或改变功能。部分功能在没有网络、账号失效或服务维护时可能不可用。个人信息处理适用 https://ctdy123.com/privacy 公布的隐私政策。
+
+9. 终止
+
+如果您严重违反本协议，许可方可以在法律允许的范围内暂停账号、订阅或终止本许可。许可终止后，您应停止使用并删除本软件。有关知识产权、责任限制和争议解决的条款在终止后继续有效。
+
+10. 免责声明
+
+本软件按“现状”和“可用”状态提供。在适用法律允许的最大范围内，许可方不作任何明示或默示保证，包括对适销性、特定用途适用性、不侵权、持续可用或完全无错误的保证。您应在处理重要文件前自行保留原始文件和备份，并在打印或分发前检查输出结果。
+
+11. 责任限制
+
+在适用法律允许的最大范围内，许可方不对任何间接、附带、特殊、惩罚性或后果性损失负责，包括数据丢失、利润损失、业务中断或第三方索赔。许可方因本软件承担的累计责任，以引发索赔前十二个月内您为 LoimReader 实际支付的金额为上限；法律禁止限制的责任不受本条影响。
+
+12. 适用法律与争议解决
+
+本协议适用中华人民共和国法律，但不包括其冲突法规则。争议应先友好协商；协商不成的，任何一方可以向许可方所在地有管辖权的人民法院提起诉讼。
+
+13. 其他
+
+如果本协议任何条款被认定无效，其余条款仍然有效。许可方未立即行使权利不构成放弃。本协议与 CTDY123.COM 服务条款共同构成双方关于 LoimReader 的约定；如针对特定服务另有书面条款，以该特定条款为准。
+
+14. 联系方式
+
+网站：https://ctdy123.com
+隐私政策：https://ctdy123.com/privacy
+服务条款：https://ctdy123.com/terms
+
+Copyright © 2024 Ctdy123.com
+
+ENGLISH VERSION
+
+IMPORTANT NOTICE
+
+Please read this Agreement carefully before installing or using LoimReader. By clicking “I accept,” continuing installation, signing in, or using the Software, you acknowledge that you have read, understood, and agreed to this Agreement. If you do not agree, do not install or use the Software.
+
+1. PARTIES AND SOFTWARE
+
+This Agreement is between you and CTDY123.COM (the “Licensor”). “LoimReader” includes the official desktop application, installers, updates, documentation, account verification, and update services supplied by the Licensor.
+
+2. LICENSE GRANT
+
+Subject to this Agreement, the website terms, and applicable subscription rules, the Licensor grants you a limited, non-exclusive, non-transferable, non-sublicensable license to install and use LoimReader on compatible devices under your control. Free, unregistered, paid, device-limited, and subscription features are governed by the Software and the rules published on CTDY123.COM.
+
+3. ACCOUNTS AND SUBSCRIPTIONS
+
+Features requiring an account or subscription may be used only by the authorized account holder. You must protect your credentials and must not sell, rent, share, or otherwise provide account or subscription benefits to unauthorized persons. Payment, renewal, refund, and cancellation are governed by the terms published on CTDY123.COM.
+
+4. USER CONTENT
+
+You retain all lawful rights in imported images, exported PDFs, and other user content. LoimReader does not acquire ownership merely by processing that content. You are responsible for having the rights necessary to process the content and for avoiding infringement of copyright, privacy, trade secrets, or other rights.
+
+5. RESTRICTIONS
+
+Except where applicable law expressly permits and does not allow contractual restriction, you may not circumvent licensing, account, subscription, device, watermark, or update controls; reverse engineer, decompile, or disassemble official binaries; remove legal notices; resell, rent, sublicense, or host the Software itself for third parties; or use it for unlawful, infringing, fraudulent, malicious, or service-disrupting activity.
+
+6. SOURCE CODE AND THIRD-PARTY COMPONENTS
+
+Public access to source code does not by itself constitute an open-source license or grant rights beyond an expressly attached license. SDL, SDL_image, SDL_ttf, stb, and other third-party components remain governed by their respective licenses. Where a third-party license conflicts with this Agreement, that license controls only for the covered third-party component.
+
+7. OWNERSHIP
+
+Except for the limited license expressly granted here, all rights in LoimReader, its name, icon, interface, documentation, services, and related intellectual property remain with the Licensor or applicable rights holders. No ownership or trademark rights are transferred.
+
+8. UPDATES AND ONLINE SERVICES
+
+The Software may connect to CTDY123.COM to check for updates, verify accounts or subscriptions, and provide downloads. Updates may correct defects, improve security or compatibility, or change features. Some functions may be unavailable without network access, during maintenance, or after account expiration. Personal information is handled under https://ctdy123.com/privacy.
+
+9. TERMINATION
+
+If you materially breach this Agreement, the Licensor may suspend an account or subscription or terminate this license to the extent permitted by law. Upon termination, you must stop using and delete the Software. Provisions concerning intellectual property, disclaimers, liability, and disputes survive termination.
+
+10. DISCLAIMER
+
+The Software is provided “as is” and “as available.” To the maximum extent permitted by law, the Licensor disclaims express and implied warranties, including merchantability, fitness for a particular purpose, non-infringement, uninterrupted availability, and error-free operation. Keep original files and backups and inspect outputs before printing or distribution.
+
+11. LIMITATION OF LIABILITY
+
+To the maximum extent permitted by law, the Licensor is not liable for indirect, incidental, special, punitive, or consequential damages, including lost data, profits, business interruption, or third-party claims. Aggregate liability is limited to the amount you paid for LoimReader during the twelve months preceding the claim, except where limitation is prohibited by law.
+
+12. GOVERNING LAW AND DISPUTES
+
+This Agreement is governed by the laws of the People’s Republic of China, excluding conflict-of-law rules. The parties should first attempt good-faith negotiation. Unresolved disputes may be submitted to a court with jurisdiction where the Licensor is located.
+
+13. GENERAL
+
+If any provision is unenforceable, the remaining provisions remain effective. Failure to enforce a right is not a waiver. This Agreement and the CTDY123.COM terms form the agreement concerning LoimReader; specific written service terms control for the corresponding service.
+
+14. CONTACT
+
+Website: https://ctdy123.com
+Privacy Policy: https://ctdy123.com/privacy
+Terms of Service: https://ctdy123.com/terms
+
+Copyright © 2024 Ctdy123.com

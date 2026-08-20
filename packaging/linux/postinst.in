@@ -1,0 +1,89 @@
+#!/bin/sh
+
+# This control script is intentionally best-effort: package installation must
+# never fail because no graphical user is currently available.
+set -u
+
+loim_uid_min=1000
+if [ -r /etc/login.defs ]; then
+    while IFS=' ' read -r loim_key loim_value loim_unused; do
+        if [ "$loim_key" = UID_MIN ]; then
+            case "$loim_value" in
+                ''|*[!0-9]*) ;;
+                *) loim_uid_min=$loim_value ;;
+            esac
+            break
+        fi
+    done < /etc/login.defs
+fi
+
+loim_user_for_uid()
+{
+    loim_uid=$1
+    case "$loim_uid" in
+        ''|*[!0-9]*|0) return 1 ;;
+    esac
+    [ "$loim_uid" -ge "$loim_uid_min" ] || return 1
+    loim_record=$(getent passwd "$loim_uid" 2>/dev/null) || return 1
+    loim_old_ifs=$IFS
+    IFS=:
+    set -- $loim_record
+    IFS=$loim_old_ifs
+    [ "$#" -ge 7 ] || return 1
+    [ "$3" = "$loim_uid" ] || return 1
+    [ "$1" != root ] || return 1
+    case "$6" in
+        /*) ;;
+        *) return 1 ;;
+    esac
+    case "$7" in
+        *nologin|*false) return 1 ;;
+    esac
+    printf '%s\n' "$1"
+}
+
+loim_active_graphical_uid()
+{
+    command -v loginctl >/dev/null 2>&1 || return 1
+    loginctl list-sessions --no-legend 2>/dev/null |
+    while IFS=' ' read -r loim_session loim_rest; do
+        [ -n "$loim_session" ] || continue
+        loim_active=$(loginctl show-session "$loim_session" -p Active --value 2>/dev/null)
+        loim_remote=$(loginctl show-session "$loim_session" -p Remote --value 2>/dev/null)
+        loim_type=$(loginctl show-session "$loim_session" -p Type --value 2>/dev/null)
+        [ "$loim_active" = yes ] || continue
+        [ "$loim_remote" = no ] || continue
+        case "$loim_type" in
+            x11|wayland) ;;
+            *) continue ;;
+        esac
+        loginctl show-session "$loim_session" -p User --value 2>/dev/null
+        break
+    done
+}
+
+loim_user=''
+if [ "${PKEXEC_UID:-}" != '' ]; then
+    loim_user=$(loim_user_for_uid "$PKEXEC_UID" 2>/dev/null || true)
+fi
+if [ "$loim_user" = '' ] && [ "${SUDO_UID:-}" != '' ]; then
+    loim_user=$(loim_user_for_uid "$SUDO_UID" 2>/dev/null || true)
+fi
+if [ "$loim_user" = '' ]; then
+    loim_active_uid=$(loim_active_graphical_uid 2>/dev/null || true)
+    if [ "$loim_active_uid" != '' ]; then
+        loim_user=$(loim_user_for_uid "$loim_active_uid" 2>/dev/null || true)
+    fi
+fi
+
+if [ "$loim_user" != '' ] && command -v runuser >/dev/null 2>&1; then
+    runuser -u "$loim_user" -- /usr/bin/LoimReader \
+        --ensure-desktop-shortcut >/dev/null 2>&1 || true
+fi
+if command -v update-desktop-database >/dev/null 2>&1; then
+    update-desktop-database /usr/share/applications >/dev/null 2>&1 || true
+fi
+if command -v gtk-update-icon-cache >/dev/null 2>&1; then
+    gtk-update-icon-cache -q -t -f /usr/share/icons/hicolor >/dev/null 2>&1 || true
+fi
+exit 0

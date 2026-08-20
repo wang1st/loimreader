@@ -1,0 +1,20 @@
+[Desktop Entry]
+Version=1.0
+Type=Application
+Name=LoimReader
+Name[zh_CN]=影谷长图阅读器
+GenericName=Long Image Pagination
+GenericName[zh_CN]=长图分页工具
+Comment=Arrange long images and multiple pictures on printable A4 pages
+Comment[zh_CN]=将长图和多张图片分割排版到可打印的 A4 页面
+TryExec=/usr/bin/LoimReader
+Exec=/usr/bin/LoimReader %F
+Icon=com.ctdy123.loimreader
+Terminal=false
+Categories=Graphics;Viewer;
+Keywords=long image;PDF;print;pagination;image;
+Keywords[zh_CN]=长图;分页;PDF;打印;图片;
+MimeType=image/png;image/jpeg;image/gif;image/bmp;
+StartupNotify=true
+StartupWMClass=com.ctdy123.loimreader
+X-LoimReader-Managed=true

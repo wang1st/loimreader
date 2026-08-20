@@ -1,0 +1,23 @@
+LoimReader Windows 安装说明
+
+1. 请先完整解压本 ZIP 文件，不要直接在压缩包内运行安装程序。
+2. 双击与当前架构一致的 LoimReader MSI 安装包。
+3. 阅读并接受最终用户许可协议。
+4. 根据需要选择是否创建桌面快捷方式。
+5. 安装完成后，可选择立即运行 LoimReader。
+
+由于当前安装包尚未购买 Windows 代码签名证书，Windows 可能显示“未知发布者”提示。
+请确认安装包来自 https://ctdy123.com/download/loimreader 或 LoimReader 官方 GitHub Release，并可使用 ZIP 中的 SHA256SUMS.txt 核对 MSI 文件。
+
+LoimReader Windows Installation Guide
+
+1. Extract the entire ZIP archive before running the installer.
+2. Double-click the LoimReader MSI matching your system architecture.
+3. Read and accept the End User License Agreement.
+4. Choose whether to create a desktop shortcut.
+5. When setup finishes, choose whether to launch LoimReader immediately.
+
+The installer is currently unsigned, so Windows may show an “Unknown publisher” warning.
+Only use packages downloaded from https://ctdy123.com/download/loimreader or the official LoimReader GitHub Release, and verify the MSI against SHA256SUMS.txt when needed.
+
+Copyright © 2024 Ctdy123.com
