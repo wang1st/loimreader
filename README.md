@@ -1,62 +1,77 @@
-# LoimReader（影谷长图阅读器）
+# LoimReader 影谷长图阅读器
 
-LoimReader 3.0 是面向 Windows、Linux、macOS 的 C17 桌面重构。默认发行路径不再链接 Qt 或 Poppler-Qt；Qt 2.x 源码仅作为行为和视觉对照，必须显式开启才会构建。
+**简体中文** | [English](README.en.md)
 
-当前模板已经具备：
+<img src="images/sitelogo.png" width="111" align="right" alt="ctdy123" />
 
-- 一次选择或拖入多张 PNG、JPEG、GIF、BMP 图片；单项失败不影响其余文件。
-- 不生成巨型拼接位图的虚拟长文档，按需渲染每个源图片切片。
-- 优先使用图片边界、空白区域与人工分割线的智能分页。
-- 尽量复刻原程序的浅灰工具栏、双画布、可拖动中缝、分页线、页码、双列、边距和缩放交互。
-- Windows、Linux、macOS 的 amd64/arm64 六目标 CI、打包、SBOM、签名 Release 与 ctdy123.com 版本登记工作流。
+一款跨平台的长图阅读与分页排版工具：把零散的截图、扫描件、漫画页面组织成一条连续的长文档，自动寻找最佳分页位置，并逐页预览排版效果。
 
-PDF 导出、系统打印与账号登录为专业版（Pro）功能；社区版中点击这些按钮会提示前往 ctdy123.com 获取专业版。两个版本共用同一份源码，见下文「社区版与专业版」。
+**Windows · macOS · Linux** ｜ **Intel / AMD64 · Apple Silicon / ARM64**
 
-## 本地构建
+## 它是做什么的？
+
+手机里存了几百张聊天记录截图，想按顺序读完、再打印成册？扫描了一本书，想确认每一页从哪里切才不断行？看条漫时长网页加载又慢又卡？
+
+LoimReader 把这些图片组织成一条**虚拟长文档**——不会真的拼出一张巨型图片，而是按需渲染每个切片，几百张高清图也不会撑爆内存。然后它帮你解决最关键的问题：**这一刀切在哪里**。自动分页会优先在图片边界与大片空白区域下刀，避免把一行文字、一张人脸切成两半；不满意的地方，拖一下分页线就能手动修正。
+
+典型场景：
+
+- 📱 聊天记录、网页长截图的连续阅读与归档
+- 📖 书籍、文件扫描件的分页校对与打印预览
+- 🎨 条漫、长插画的离线流畅阅读
+- 📄 把一组图片排版成规范的 A4 页面（多栏、页码、边距）
+
+## 功能特性
+
+### 导入与组织
+
+- **批量导入**：一次打开或拖入多张 PNG / JPEG / GIF / BMP，单张图片损坏或格式不符不影响其余文件
+- **虚拟长文档**：不生成巨型拼接位图，按需渲染源图片切片，内存占用不随图片数量膨胀
+- **即拖即读**：把文件拖进窗口即可开始阅读，支持随时追加
+
+### 智能分页
+
+- **自动分页**：优先在图片边界与空白区域切页，文字行不会被拦腰截断
+- **手动分页线**：在预览中拖动分页线即可指定切页位置，自动与手动结果可以叠加
+- **一键重排**：调整布局后点击「自动分页」重新计算最佳切点
+
+### 排版与预览
+
+- **单栏 / 双栏 / 三栏**：一键循环切换分栏布局
+- **页码**：右下角、底部居中或隐藏，一键切换
+- **页边距**：逐档增减打印边距
+- **双画布视图**：左侧连续长图，右侧逐页排版预览，中间分割条自由拖动
+- **预览缩放**：`+` / `-` 逐档缩放预览页面
+
+### 贴心细节
+
+- **状态记忆**：关闭再打开，自动恢复上次的布局、页码、边距、缩放，甚至窗口位置
+- **中英双语界面**：自动跟随系统语言
+- **全平台原生体验**：Windows、macOS（Intel / Apple Silicon）、Linux（X11 / Wayland）
+
+## 下载
+
+前往官网 **[ctdy123.com](https://ctdy123.com)** 下载各平台安装包。
+
+## 从源码构建
+
+需要 CMake ≥ 3.25 与 C17 编译器，依赖（SDL3 等）由 CMake 自动获取：
 
 ```bash
-cmake -S . -B build \
-  -DLOIM_BUILD_LEGACY_QT=OFF \
-  -DLOIM_BUILD_DESKTOP=ON \
-  -DBUILD_TESTING=ON
-cmake --build build --config Release
-ctest --test-dir build -C Release --output-on-failure
+cmake -S . -B build -DBUILD_TESTING=ON
+cmake --build build --parallel
+ctest --test-dir build --output-on-failure
 ```
 
-批量分页规划也可以独立运行：
+## 专业版
 
-```bash
-./build/loimreader-plan image-1.png image-2.jpg
-```
+需要把排版结果**导出为 PDF**、**直接打印**，或登录账号解锁完整功能？
+**[前往 ctdy123.com 获取 LoimReader 专业版 →](https://ctdy123.com)**
 
-## 社区版与专业版
-
-同一份源码构建两个发行版：
-
-- **社区版（默认）**：长图阅读、智能分页、双画布预览、页码、边距、缩放与配置持久化全部可用；PDF 导出、打印、账号登录按钮会提示前往官网获取专业版。
-- **专业版**：配置时加 `-DLOIM_EDITION_PRO=ON`，额外解锁 PDF 导出、打印与账号功能。
-
-专业版代码以 `LOIM_EDITION_PRO` 预处理守卫隔离；公开的社区版源码树由剥离工具自动生成（移除守卫代码、`src/core/pdf.c`、`include/loim/pdf.h`、发布工作流与内部脚本），并经过完整构建与测试验证。
-
-## 架构与发布
+## 文档
 
 - [系统设计](docs/architecture/SYSTEM_DESIGN.md)
 - [依赖与许可策略](docs/architecture/DEPENDENCY_POLICY.md)
 - [架构决策记录](docs/adr/)
-- [GitHub 自动发布与 ctdy123.com 登记](docs/architecture/GITHUB_RELEASE_SETUP.md)
 
-发布工作流只有在六个平台产物全部通过测试后，才会创建签名清单并调用 ctdy123.com 的专用 API。该链路不持有 ECS root 凭据，不同步服务器目录，也不重启与 z-pulse.cn 共享的 Nginx 或其他服务。
-
-## 旧版对照构建
-
-只有迁移核对时才使用：
-
-```bash
-cmake -S . -B build-legacy -DLOIM_BUILD_LEGACY_QT=ON
-```
-
-旧版脚本、说明和 Qt 源码不进入 3.0 GitHub Release。任何旧 OSS 凭据都必须轮换，真实密钥只能保存在 GitHub Environment、网站进程环境或工作区外的受限密钥文件中。
-
-## 许可
-
-发行依赖及许可见 [THIRD_PARTY_NOTICES.md](THIRD_PARTY_NOTICES.md)。当前 SDL3、SDL3_image 与 stb 均采用宽松许可；最终发行前仍应以实际二进制依赖扫描和法律审查为准。
+第三方组件许可见 [THIRD_PARTY_NOTICES](THIRD_PARTY_NOTICES.md)。
