@@ -152,7 +152,9 @@ jobs:
           name: loimreader-${{ matrix.platform }}-${{ matrix.arch }}
           path: dist/*
           if-no-files-found: error
-          retention-days: 14
+          # Private-repo artifact storage is quota-limited; CI packages are
+          # only needed for short-term inspection (releases keep theirs 30d).
+          retention-days: 3
 
   sanitizers:
     name: Address and undefined behavior sanitizers
