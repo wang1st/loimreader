@@ -1,0 +1,388 @@
+name: Release community edition
+
+# Community-edition release pipeline. Source of truth lives in the Pro
+# repository at tools/community-release/release.yml; the export script copies
+# it to .github/workflows/release.yml in the public tree. Differences from the
+# Pro pipeline: the edition flag is never set (community is the default), no
+# manifest signing, no ctdy123.com registration.
+
+on:
+  push:
+    tags: ['v3.*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Semantic version, for example 3.0.6
+        required: true
+        type: string
+      publish:
+        description: Create the GitHub Release (tag pushes always publish)
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+concurrency:
+  group: loimreader-community-release
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: Package ${{ matrix.platform }}-${{ matrix.arch }}
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - platform: linux
+            arch: amd64
+            runner: ubuntu-24.04
+          - platform: linux
+            arch: arm64
+            # GitHub's ARM64 hosted runners do not support Docker containers.
+            # Linux builds therefore run inside a glibc 2.31 (ubuntu:20.04)
+            # container on the x64 runner, with QEMU emulation for arm64.
+            runner: ubuntu-24.04
+          - platform: windows
+            arch: amd64
+            runner: windows-2025
+          - platform: windows
+            arch: arm64
+            runner: windows-11-arm
+          - platform: macos
+            arch: amd64
+            runner: macos-26-intel
+          - platform: macos
+            arch: arm64
+            runner: macos-26
+
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Install pinned WiX Toolset
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wixRoot = Join-Path $env:RUNNER_TEMP 'wix'
+          dotnet tool install --tool-path $wixRoot wix --version 4.0.6
+          & (Join-Path $wixRoot 'wix.exe') extension add --global WixToolset.UI.wixext/4.0.6
+          & (Join-Path $wixRoot 'wix.exe') extension add --global WixToolset.Util.wixext/4.0.6
+          $wixRoot | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+          "WIX=$wixRoot" | Out-File -FilePath $env:GITHUB_ENV -Encoding utf8 -Append
+
+      - name: Resolve version
+        shell: bash
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION:-${GITHUB_REF_NAME#v}}"
+          if [[ ! "$version" =~ ^[0-9]+\.[0-9]+\.[0-9]+(-[0-9A-Za-z.-]+)?$ ]]; then
+            echo "Invalid semantic version: $version" >&2
+            exit 1
+          fi
+          echo "RELEASE_VERSION=$version" >> "$GITHUB_ENV"
+
+      - name: Set up QEMU for arm64 container build
+        if: runner.os == 'Linux' && matrix.arch == 'arm64'
+        uses: docker/setup-qemu-action@v3
+
+      # Linux release packages must run on Kylin / UOS desktops, whose glibc
+      # is at most 2.31. Building on ubuntu-24.04 (glibc 2.39) produces
+      # binaries those systems reject. Build inside an ubuntu:20.04 container
+      # (glibc 2.31) instead so the .deb links only GLIBC_2.31 symbols.
+      - name: Build, test and package in glibc 2.31 container
+        if: runner.os == 'Linux'
+        shell: bash
+        env:
+          RELEASE_VERSION: ${{ env.RELEASE_VERSION }}
+        run: |
+          docker run --rm \
+            --platform "linux/${{ matrix.arch }}" \
+            --workdir /workspace \
+            --volume "$GITHUB_WORKSPACE:/workspace" \
+            --env RELEASE_VERSION="$RELEASE_VERSION" \
+            --env PLATFORM="${{ matrix.platform }}" \
+            --env ARCH="${{ matrix.arch }}" \
+            ubuntu:20.04 \
+            bash -euxo pipefail -c '
+              export DEBIAN_FRONTEND=noninteractive
+              apt-get update -qq
+              apt-get install -y -qq --no-install-recommends \
+                build-essential cmake git ca-certificates cups-client curl \
+                desktop-file-utils dpkg-dev \
+                file jq python3 python3-pip \
+                libsecret-tools \
+                libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
+                libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
+                libxkbcommon-dev libcurl4-openssl-dev fonts-noto-cjk
+              # ubuntu 20.04 ships cmake 3.16; this project requires >= 3.25.
+              python3 -m pip install --no-cache-dir cmake
+              export PATH="/usr/local/bin:$PATH"
+              cmake -S . -B build \
+                -DLOIM_BUILD_LEGACY_QT=OFF \
+                -DLOIM_BUILD_DESKTOP=ON \
+                -DBUILD_TESTING=ON \
+                -DLOIM_ENABLE_STRICT_WARNINGS=ON \
+                -DLOIM_VERSION_OVERRIDE="$RELEASE_VERSION" \
+                -DLOIM_RELEASE_PLATFORM="$PLATFORM" \
+                -DLOIM_RELEASE_ARCH="$ARCH" \
+                -DCMAKE_BUILD_TYPE=Release
+              cmake --build build --config Release --parallel
+              ctest --test-dir build --build-config Release --output-on-failure
+              cmake --install build --config Release --prefix stage/LoimReader
+              mkdir -p dist
+              cpack --config build/CPackConfig.cmake -C Release -B dist
+              package="dist/LoimReader_${RELEASE_VERSION}_${PLATFORM}_${ARCH}.deb"
+              desktop-file-validate \
+                packaging/linux/com.ctdy123.loimreader.desktop
+              control_dir="$(mktemp -d)"
+              dpkg-deb --control "$package" "$control_dir"
+              test -x "$control_dir/postinst"
+              grep -Fq -- --ensure-desktop-shortcut "$control_dir/postinst"
+              # No graphical session exists in this container. Installing the
+              # general DEB must remain successful in that situation.
+              dpkg -i "$package"
+              # Files created by the container (root) must stay readable by the
+              # runner user for later audit/upload steps.
+              chmod -R a+rX /workspace/stage /workspace/dist
+            '
+
+      - name: Configure
+        if: runner.os != 'Linux'
+        shell: bash
+        run: >-
+          cmake -S . -B build
+          -DLOIM_BUILD_LEGACY_QT=OFF
+          -DLOIM_BUILD_DESKTOP=ON
+          -DBUILD_TESTING=ON
+          -DLOIM_ENABLE_STRICT_WARNINGS=ON
+          -DLOIM_VERSION_OVERRIDE="$RELEASE_VERSION"
+          -DLOIM_RELEASE_PLATFORM="${{ matrix.platform }}"
+          -DLOIM_RELEASE_ARCH="${{ matrix.arch }}"
+          -DCMAKE_BUILD_TYPE=Release
+
+      - name: Build and test
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          cmake --build build --config Release --parallel
+          ctest --test-dir build --build-config Release --output-on-failure
+
+      - name: Install
+        if: runner.os != 'Linux'
+        shell: bash
+        run: cmake --install build --config Release --prefix stage/LoimReader
+
+      - name: Verify installed macOS application signature
+        if: runner.os == 'macOS'
+        run: >-
+          codesign --verify --deep --strict --verbose=4
+          stage/LoimReader/LoimReader.app
+
+      - name: Reject legacy Qt and Poppler files
+        shell: bash
+        run: |
+          if find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \) | grep -q .; then
+            echo 'Legacy Qt/Poppler file found in release stage' >&2
+            find stage -type f \( -iname '*qt*' -o -iname '*poppler*' \)
+            exit 1
+          fi
+
+      - name: Audit Unix runtime dependencies
+        if: runner.os != 'Windows'
+        shell: bash
+        run: |
+          if [[ "$RUNNER_OS" == macOS ]]; then
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/LoimReader.app/Contents/MacOS/LoimReader"
+          else
+            binary="$GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader"
+          fi
+          cmake \
+            -DLOIM_BINARY="$binary" \
+            -DLOIM_STAGE_ROOT="$GITHUB_WORKSPACE/stage/LoimReader" \
+            -P scripts/check-runtime-dependencies.cmake
+
+      - name: Audit Windows runtime dependencies
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: >-
+          cmake
+          "-DLOIM_BINARY=$env:GITHUB_WORKSPACE/stage/LoimReader/bin/LoimReader.exe"
+          "-DLOIM_STAGE_ROOT=$env:GITHUB_WORKSPACE/stage/LoimReader"
+          -P scripts/check-runtime-dependencies.cmake
+
+      - name: Create native installer
+        if: runner.os != 'Linux'
+        shell: bash
+        run: |
+          if [[ "${{ matrix.platform }}" == windows ]]; then
+            mkdir -p native-dist
+            if ! cpack --config build/CPackConfig.cmake -C Release -B native-dist; then
+              cat native-dist/_CPack_Packages/win64/WIX/wix.log
+              exit 1
+            fi
+          else
+            mkdir -p dist
+            cpack --config build/CPackConfig.cmake -C Release -B dist
+          fi
+
+      - name: Validate native installer name and size
+        shell: bash
+        run: |
+          case "${{ matrix.platform }}" in
+            windows)
+              package="native-dist/LoimReader_${RELEASE_VERSION}_windows_${{ matrix.arch }}.msi"
+              ;;
+            linux)
+              package="dist/LoimReader_${RELEASE_VERSION}_linux_${{ matrix.arch }}.deb"
+              ;;
+            macos)
+              package="dist/LoimReader_${RELEASE_VERSION}_macos_${{ matrix.arch }}.dmg"
+              ;;
+          esac
+          test -s "$package"
+
+      - name: Wrap Windows installer in ZIP and test it
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $msi = "native-dist/LoimReader_$($env:RELEASE_VERSION)_windows_${{ matrix.arch }}.msi"
+          ./scripts/package-windows-zip.ps1 `
+            -MsiPath $msi `
+            -OutputDirectory dist `
+            -Version $env:RELEASE_VERSION `
+            -Architecture '${{ matrix.arch }}' `
+            -SourceDirectory $env:GITHUB_WORKSPACE
+          ./tests/test_windows_package.ps1 `
+            -MsiPath $msi `
+            -ZipPath "dist/LoimReader_$($env:RELEASE_VERSION)_windows_${{ matrix.arch }}.zip" `
+            -Version $env:RELEASE_VERSION `
+            -Architecture '${{ matrix.arch }}'
+
+      - name: Inspect Debian package
+        if: runner.os == 'Linux'
+        run: |
+          package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.deb"
+          dpkg-deb --info "$package"
+          contents="$(dpkg-deb --contents "$package")"
+          for required in \
+            '/bin/LoimReader' \
+            '/share/licenses/LoimReader/' \
+            '/share/applications/com.ctdy123.loimreader.desktop' \
+            '/share/icons/hicolor/scalable/apps/com.ctdy123.loimreader.svg'; do
+            grep -Fq "$required" <<< "$contents"
+          done
+          for size in 16 24 32 48 64 128 256 512; do
+            grep -Fq \
+              "/share/icons/hicolor/${size}x${size}/apps/com.ctdy123.loimreader.png" \
+              <<< "$contents"
+          done
+          control_dir="$(mktemp -d)"
+          dpkg-deb --control "$package" "$control_dir"
+          test -x "$control_dir/postinst"
+          grep -Fq -- '--ensure-desktop-shortcut' "$control_dir/postinst"
+
+      - name: Verify glibc requirement does not exceed 2.31
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          binary="stage/LoimReader/bin/LoimReader"
+          echo "GLIBC_ symbols required by $binary:"
+          objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sort -Vu
+          max_glibc="$(objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sed 's/^GLIBC_//' | sort -V | tail -1)"
+          echo "Highest required glibc: ${max_glibc}"
+          # Target desktops (Kylin / UOS) provide glibc up to 2.31.
+          if [[ "$(printf '%s\n2.31' "$max_glibc" | sort -V | tail -1)" != "2.31" ]]; then
+            echo "ERROR: binary requires glibc ${max_glibc}, above the 2.31 ceiling" >&2
+            exit 1
+          fi
+          echo "glibc compatibility check passed (<= 2.31)"
+
+      - name: Verify macOS disk image
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          package="dist/LoimReader_${RELEASE_VERSION}_${{ matrix.platform }}_${{ matrix.arch }}.dmg"
+          mount_point="$RUNNER_TEMP/loimreader-dmg"
+          hdiutil verify "$package"
+          mkdir -p "$mount_point"
+          hdiutil attach "$package" -nobrowse -readonly -mountpoint "$mount_point"
+          trap 'hdiutil detach "$mount_point"' EXIT
+          test -d "$mount_point/LoimReader.app"
+          test -L "$mount_point/Applications"
+          test -s "$mount_point/macOS 安装说明.txt"
+          codesign --verify --deep --strict --verbose=4 "$mount_point/LoimReader.app"
+          hdiutil detach "$mount_point"
+          trap - EXIT
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-${{ matrix.platform }}-${{ matrix.arch }}
+          # CPack also creates dist/_CPack_Packages as an internal workspace.
+          # Upload only the validated installer, never that transient directory.
+          path: dist/LoimReader_*
+          if-no-files-found: error
+          retention-days: 30
+
+  github-release:
+    name: Create GitHub Release
+    needs: build
+    if: github.event_name == 'push' || inputs.publish
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v6
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: release-*
+          path: dist
+          merge-multiple: true
+
+      - name: Resolve release metadata
+        id: meta
+        env:
+          REQUESTED_VERSION: ${{ inputs.version }}
+        run: |
+          version="${REQUESTED_VERSION:-${GITHUB_REF_NAME#v}}"
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+          echo "tag=v$version" >> "$GITHUB_OUTPUT"
+
+      - name: Validate all six packages and create SBOM
+        env:
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+          RELEASE_REPOSITORY: ${{ github.repository }}
+        run: |
+          ./scripts/create-sbom.sh loimreader.spdx.json
+          for package in dist/LoimReader_*; do
+            test -s "$package"
+          done
+          test "$(find dist -name 'LoimReader_*' -type f | wc -l)" -eq 6
+          sha256sum dist/* loimreader.spdx.json > SHA256SUMS
+
+      - name: Create GitHub Release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_TAG: ${{ steps.meta.outputs.tag }}
+          RELEASE_VERSION: ${{ steps.meta.outputs.version }}
+        run: |
+          release_flags=()
+          if [[ "$RELEASE_VERSION" == *-* ]]; then
+            release_flags+=(--prerelease)
+          fi
+          notes="$(mktemp)"
+          {
+            echo "**LoimReader 社区版** · Community Edition"
+            echo
+            echo "Windows (MSI/ZIP) · macOS (DMG, Intel / Apple Silicon) · Linux (DEB, amd64 / arm64)"
+            echo
+            echo "需要 PDF 导出与直接打印？专业版见 [ctdy123.com](https://ctdy123.com)。"
+            echo "Need PDF export and direct printing? Get Pro at [ctdy123.com](https://ctdy123.com)."
+          } > "$notes"
+          gh release create "$RELEASE_TAG" "${release_flags[@]}" \
+            dist/* SHA256SUMS loimreader.spdx.json \
+            --target "$GITHUB_SHA" \
+            --notes-file "$notes" \
+            --generate-notes \
+            --title "LoimReader $RELEASE_TAG"
