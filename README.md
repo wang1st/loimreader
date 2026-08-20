@@ -8,6 +8,8 @@
 
 **Windows · macOS · Linux** ｜ **Intel / AMD64 · Apple Silicon / ARM64**
 
+![LoimReader 主界面：左侧连续长文档阅读，右侧逐页排版预览，41 页一目了然](docs/screenshots/main-window.png)
+
 ## 它是做什么的？
 
 手机里存了几百张聊天记录截图，想按顺序读完、再打印成册？扫描了一本书，想确认每一页从哪里切才不断行？看条漫时长网页加载又慢又卡？

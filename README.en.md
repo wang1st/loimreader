@@ -8,6 +8,8 @@ A cross-platform long-image reader and pagination studio: it organizes scattered
 
 **Windows · macOS · Linux** ｜ **Intel / AMD64 · Apple Silicon / ARM64**
 
+![LoimReader main window: continuous long-document reading on the left, page-by-page print preview on the right](docs/screenshots/main-window.png)
+
 ## What is it for?
 
 Hundreds of chat screenshots to read in order and print as a booklet? A scanned book whose page breaks must not cut a line of text in half? A webtoon strip that takes forever to load in a browser?
