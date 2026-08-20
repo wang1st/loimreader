@@ -552,7 +552,13 @@ static void test_export_default_filename_rules(void)
     (void)remove("命名测试-双栏.pdf");
     (void)remove("命名测试-双栏 (2).pdf");
 #endif
+#if defined(_WIN32)
+    /* Narrow fopen creates the file under the ANSI code page, while the
+       collision probe below checks for the true UTF-8 name. */
+    existing = _wfopen(L"\x547D\x540D\x6D4B\x8BD5-\x53CC\x680F.pdf", L"wb");
+#else
     existing = fopen("命名测试-双栏.pdf", "wb");
+#endif
     CHECK(existing != NULL);
     if (existing != NULL) {
         CHECK(fclose(existing) == 0);
