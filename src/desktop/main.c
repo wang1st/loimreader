@@ -1034,7 +1034,7 @@ static int SDLCALL app_auth_thread_main(void *userdata)
             &task->http_status);
     }
     if (task->status == LOIM_OK && task->result.success) {
-        loim_entitlement entitlement;
+        loim_entitlement entitlement = {0};
         task->status = loim_entitlement_verify(
             task->result.entitlement_payload, task->result.entitlement_signature,
             task->machine_code, task->result.email, task->entitlement_nonce,
@@ -5235,7 +5235,7 @@ int main(int argc, char **argv)
     if (argc == 7 && strcmp(argv[1], "--verify-entitlement-test") == 0) {
         char *payload = SDL_LoadFile(argv[2], NULL);
         char *signature = SDL_LoadFile(argv[3], NULL);
-        loim_entitlement entitlement;
+        loim_entitlement entitlement = {0};
         bool success = payload != NULL && signature != NULL &&
             loim_entitlement_verify(payload, signature, argv[4], argv[5], argv[6],
                 0U, &entitlement) == LOIM_OK;

@@ -881,7 +881,6 @@ static void test_auth_json_rejects_cross_scope_and_malformed_values(void)
     };
     size_t index;
     char nested[2048] = "0";
-    char next[2048];
     char response[4096];
     loim_login_result result;
     for (index = 0U; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
@@ -895,8 +894,11 @@ static void test_auth_json_rejects_cross_scope_and_malformed_values(void)
         "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"active\":false,\"\\u0061ctive\":true}}",
         &result) == LOIM_ERROR_INVALID_DATA);
     for (index = 0U; index < 28U; ++index) {
-        (void)snprintf(next, sizeof(next), "{\"a\":%s,\"b\":0}", nested);
-        memcpy(nested, next, strlen(next) + 1U);
+        size_t length = strlen(nested);
+        CHECK(length + 13U <= sizeof(nested));
+        memmove(nested + 5U, nested, length);
+        memcpy(nested, "{\"a\":", 5U);
+        memcpy(nested + 5U + length, ",\"b\":0}", 8U);
     }
     (void)snprintf(response, sizeof(response),
         "{\"success\":true,\"token\":\"jwt\",\"extra\":%s}", nested);
