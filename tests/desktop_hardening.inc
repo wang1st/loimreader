@@ -36,6 +36,16 @@ static bool app_run_hardening_tests(void)
     task.http_status = 401;
     app_copy_text(task.result.error_code, sizeof(task.result.error_code), "TOKEN_EXPIRED");
     app_apply_background_auth(&app, &task);
+    success = success && app.licensed && app.logged_in && app.export_licensed && !app.login_open;
+    app_copy_text(task.result.error_code, sizeof(task.result.error_code), "UNAUTHORIZED");
+    app_apply_background_auth(&app, &task);
+    success = success && app.licensed;
+    app_copy_text(task.result.error_code, sizeof(task.result.error_code), "INVALID_TOKEN");
+    app_apply_background_auth(&app, &task);
+    success = success && app.licensed;
+    task.http_status = 404;
+    app_copy_text(task.result.error_code, sizeof(task.result.error_code), "DEVICE_NOT_FOUND");
+    app_apply_background_auth(&app, &task);
     success = success && !app.licensed && app.logged_in && app.export_licensed && !app.login_open;
     task.result.success = true;
     task.http_status = 200;

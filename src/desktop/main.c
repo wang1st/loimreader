@@ -1241,8 +1241,16 @@ static void app_apply_background_auth(app_state *app, const app_auth_task *task)
         app_copy_text(app->subscription_expires_at, sizeof(app->subscription_expires_at),
             task->result.subscription_expires_at);
     } else if (app_session_is_invalid(task)) {
-        app->licensed = false;
-        loim_entitlement_cache_clear();
+        /* An expired/rejected login token is not evidence that a paid
+         * subscription ended. Only explicit account/device revocation clears
+         * an already verified entitlement; a signed free response is handled
+         * above. This also preserves existing offline use during re-login. */
+        if (strcmp(task->result.error_code, "DEVICE_NOT_FOUND") == 0 ||
+            strcmp(task->result.error_code, "USER_NOT_FOUND") == 0 ||
+            strcmp(task->result.error_code, "ACCOUNT_DISABLED") == 0) {
+            app->licensed = false;
+            loim_entitlement_cache_clear();
+        }
         app_set_status(app, app_translation(app, LOIM_TEXT_SESSION_EXPIRED));
     }
 }
