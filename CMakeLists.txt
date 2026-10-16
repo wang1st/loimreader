@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 option(LOIM_BUILD_LEGACY_QT "Build the legacy Qt application" OFF)
 
 if(NOT LOIM_BUILD_LEGACY_QT)
-    set(LOIM_VERSION_OVERRIDE "3.0.6" CACHE STRING "C17 application version")
+    set(LOIM_VERSION_OVERRIDE "3.0.11" CACHE STRING "C17 application version")
     string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" LOIM_NUMERIC_VERSION "${LOIM_VERSION_OVERRIDE}")
     if(NOT LOIM_NUMERIC_VERSION)
         message(FATAL_ERROR "LOIM_VERSION_OVERRIDE must start with major.minor.patch")
@@ -45,6 +45,7 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         src/core/credentials.c
         src/core/document.c
         src/core/edition.c
+        src/core/entitlement.c
         src/core/export_name.c
         src/core/image_probe.c
         src/core/import_queue.c
@@ -59,6 +60,14 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         src/core/update.c
     )
     add_library(LoimReader::Core ALIAS loim_core)
+    add_library(loim_crypto STATIC
+        vendor/monocypher/monocypher.c vendor/monocypher/monocypher-ed25519.c)
+    target_include_directories(loim_crypto PUBLIC
+        $<BUILD_INTERFACE:${CMAKE_CURRENT_SOURCE_DIR}/vendor/monocypher>)
+    target_compile_features(loim_crypto PRIVATE c_std_99)
+    set_target_properties(loim_crypto PROPERTIES C_VISIBILITY_PRESET hidden)
+    target_link_libraries(loim_core PRIVATE loim_crypto)
+
 
 
     target_compile_features(loim_core PUBLIC c_std_17)
@@ -182,6 +191,27 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         )
         FetchContent_MakeAvailable(SDL3_image)
 
+        # Some image sources serve WebP payloads with a .jpg suffix. Probe by
+        # signature and decode with the exact libwebp revision vendored by the
+        # pinned SDL_image source tree.
+        set(WEBP_BUILD_ANIM_UTILS OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_CWEBP OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_DWEBP OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_EXTRAS OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_GIF2WEBP OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_IMG2WEBP OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_LIBWEBPMUX OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_VWEBP OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_WEBPINFO OFF CACHE BOOL "" FORCE)
+        set(WEBP_BUILD_WEBPMUX OFF CACHE BOOL "" FORCE)
+        FetchContent_Declare(
+            libwebp
+            URL https://github.com/libsdl-org/libwebp/archive/42611dee80e9dd744e6fca13c11c682d36463b9d.tar.gz
+            URL_HASH SHA256=cd2a6e9a60f621c2527920ad166f95b594d8ed95b000e423ad4a02b45a161b60
+            DOWNLOAD_EXTRACT_TIMESTAMP TRUE
+        )
+        FetchContent_MakeAvailable(libwebp)
+
         set(SDLTTF_INSTALL OFF CACHE BOOL "" FORCE)
         set(SDLTTF_SAMPLES OFF CACHE BOOL "" FORCE)
         set(SDLTTF_VENDORED ON CACHE BOOL "" FORCE)
@@ -230,15 +260,26 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         else()
             find_package(CURL REQUIRED)
             set(LOIM_HTTP_SOURCE src/desktop/http_curl.c)
+            # Keep a build-tree copy beside the executable so local Linux
+            # runs exercise the same window icon as the installed DEB. The
+            # packaged executable resolves the installed hicolor copy via
+            # ../share at runtime.
+            configure_file(
+                "${CMAKE_CURRENT_SOURCE_DIR}/icons/linux/64x64/loimreader.png"
+                "${CMAKE_CURRENT_BINARY_DIR}/com.ctdy123.loimreader.png"
+                COPYONLY)
             add_executable(loimreader
                 src/desktop/main.c
                 src/desktop/credential_store.c
                 src/desktop/linux_shortcut.c
                 ${LOIM_HTTP_SOURCE})
         endif()
+        target_sources(loimreader PRIVATE src/desktop/image_memory.c src/desktop/entitlement_store.c)
         target_compile_features(loimreader PRIVATE c_std_17)
         target_compile_definitions(loimreader PRIVATE
             LOIM_APP_VERSION="${LOIM_VERSION_OVERRIDE}")
+        target_include_directories(loimreader PRIVATE
+            "${libwebp_SOURCE_DIR}/src")
         if(MSVC)
             target_compile_definitions(loimreader PRIVATE _CRT_SECURE_NO_WARNINGS)
         endif()
@@ -247,6 +288,7 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             SDL3::SDL3
             SDL3_image::SDL3_image
             SDL3_ttf::SDL3_ttf
+            webpdecoder
         )
         if(APPLE)
             target_link_libraries(loimreader PRIVATE
@@ -255,7 +297,7 @@ if(NOT LOIM_BUILD_LEGACY_QT)
                 "-framework IOKit"
                 "-framework Security")
         elseif(WIN32)
-            target_link_libraries(loimreader PRIVATE advapi32 winhttp)
+            target_link_libraries(loimreader PRIVATE advapi32 winhttp bcrypt)
         else()
             target_link_libraries(loimreader PRIVATE CURL::libcurl)
         endif()
@@ -265,16 +307,52 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         )
         loim_enable_strict_warnings(loimreader)
 
+        set_target_properties(loimreader PROPERTIES C_VISIBILITY_PRESET hidden)
         if(BUILD_TESTING)
+            # Test-only command handlers never enter the installed executable.
+            get_target_property(_loim_test_sources loimreader SOURCES)
+            add_executable(loimreader-test ${_loim_test_sources})
+            foreach(_property INCLUDE_DIRECTORIES COMPILE_DEFINITIONS LINK_LIBRARIES)
+                get_target_property(_value loimreader ${_property})
+                if(_value)
+                    set_property(TARGET loimreader-test PROPERTY ${_property} "${_value}")
+                endif()
+            endforeach()
+            target_compile_definitions(loimreader-test PRIVATE LOIM_INTERNAL_TESTS=1)
+            target_compile_features(loimreader-test PRIVATE c_std_17)
+            set_target_properties(loimreader-test PROPERTIES C_EXTENSIONS OFF)
+            loim_enable_strict_warnings(loimreader-test)
+            add_test(NAME loim_release_binary_isolation
+                COMMAND ${CMAKE_COMMAND} -DAPP=$<TARGET_FILE:loimreader>
+                    -P "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_binary.cmake")
+            add_test(
+                NAME loim_desktop_hardening
+                COMMAND $<TARGET_FILE:loimreader-test> --hardening-test)
             add_test(
                 NAME loim_desktop_smoke
-                COMMAND $<TARGET_FILE:loimreader>
+                COMMAND $<TARGET_FILE:loimreader-test>
                     --smoke-test
                     "${CMAKE_CURRENT_SOURCE_DIR}/images/sitelogo.png"
                     "${CMAKE_CURRENT_SOURCE_DIR}/images/myshop.jpeg")
+            set(LOIM_MISLABELED_WEBP_FIXTURE
+                "${CMAKE_CURRENT_BINARY_DIR}/loim-webp-content.jpg")
+            add_test(
+                NAME loim_prepare_mislabeled_webp_fixture
+                COMMAND ${CMAKE_COMMAND} -E copy
+                    "${libwebp_SOURCE_DIR}/examples/test.webp"
+                    "${LOIM_MISLABELED_WEBP_FIXTURE}")
+            set_tests_properties(loim_prepare_mislabeled_webp_fixture PROPERTIES
+                FIXTURES_SETUP loim_mislabeled_webp_fixture)
+            add_test(
+                NAME loim_mislabeled_webp_smoke
+                COMMAND $<TARGET_FILE:loimreader-test>
+                    --smoke-test
+                    "${LOIM_MISLABELED_WEBP_FIXTURE}")
+            set_tests_properties(loim_mislabeled_webp_smoke PROPERTIES
+                FIXTURES_REQUIRED loim_mislabeled_webp_fixture)
             add_test(
                 NAME loim_async_clear_smoke
-                COMMAND $<TARGET_FILE:loimreader>
+                COMMAND $<TARGET_FILE:loimreader-test>
                     --async-clear-smoke-test
                     "${CMAKE_CURRENT_SOURCE_DIR}/images/sitelogo.png"
                     "${CMAKE_CURRENT_SOURCE_DIR}/images/myshop.jpeg")
@@ -331,6 +409,11 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             RENAME SDL3_image-LICENSE.txt
             COMPONENT Runtime)
         install(FILES
+            "${libwebp_SOURCE_DIR}/COPYING"
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
+            RENAME libwebp-LICENSE.txt
+            COMPONENT Runtime)
+        install(FILES
             "${sdl3_ttf_SOURCE_DIR}/LICENSE.txt"
             DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
             RENAME SDL3_ttf-LICENSE.txt
@@ -340,6 +423,8 @@ if(NOT LOIM_BUILD_LEGACY_QT)
             DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
             RENAME FreeType-LICENSE.txt
             COMPONENT Runtime)
+        install(FILES "${CMAKE_CURRENT_SOURCE_DIR}/vendor/monocypher/LICENCE.md"
+            DESTINATION "${LOIM_LICENSE_INSTALL_DIR}" RENAME Monocypher-LICENSE.txt COMPONENT Runtime)
         install(FILES
             "${CMAKE_CURRENT_SOURCE_DIR}/THIRD_PARTY_NOTICES.md"
             DESTINATION "${LOIM_LICENSE_INSTALL_DIR}"
@@ -377,6 +462,20 @@ if(NOT LOIM_BUILD_LEGACY_QT)
     endif()
 
     if(BUILD_TESTING)
+        add_executable(loim_entitlement_tests tests/test_entitlement.c src/core/entitlement.c)
+        target_include_directories(loim_entitlement_tests PRIVATE include)
+        target_compile_definitions(loim_entitlement_tests PRIVATE LOIM_ENTITLEMENT_TEST_VECTORS=1)
+        target_link_libraries(loim_entitlement_tests PRIVATE loim_crypto)
+        target_compile_features(loim_entitlement_tests PRIVATE c_std_17)
+        loim_enable_strict_warnings(loim_entitlement_tests)
+        add_test(NAME loim_entitlement_tests COMMAND loim_entitlement_tests)
+        add_executable(loim_image_memory_tests
+            tests/test_image_memory.c src/desktop/image_memory.c)
+        target_include_directories(loim_image_memory_tests PRIVATE src/desktop)
+        target_compile_features(loim_image_memory_tests PRIVATE c_std_17)
+        loim_enable_strict_warnings(loim_image_memory_tests)
+        add_test(NAME loim_image_memory_tests COMMAND loim_image_memory_tests)
+
         add_executable(loim_core_tests tests/test_core.c)
         target_compile_features(loim_core_tests PRIVATE c_std_17)
         target_link_libraries(loim_core_tests PRIVATE LoimReader::Core)
@@ -418,6 +517,40 @@ if(NOT LOIM_BUILD_LEGACY_QT)
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_linux_postinst.sh"
                     "${CMAKE_CURRENT_SOURCE_DIR}/packaging/linux/postinst.in")
             add_test(
+                NAME loim_linux_window_icon_source_tests
+                COMMAND sh
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_linux_window_icon_sources.sh"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+            add_test(
+                NAME loim_linux_release_compatibility_source_tests
+                COMMAND sh
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_linux_release_compatibility_sources.sh"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+            add_test(
+                NAME loim_release_transport_source_tests
+                COMMAND sh
+                    "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_transport_sources.sh"
+                    "${CMAKE_CURRENT_SOURCE_DIR}")
+            if(CMAKE_SYSTEM_NAME STREQUAL "Linux" AND LOIM_BUILD_DESKTOP)
+                find_program(LOIM_XVFB_RUN_EXECUTABLE xvfb-run)
+                find_program(LOIM_XPROP_EXECUTABLE xprop)
+                if(LOIM_XVFB_RUN_EXECUTABLE AND LOIM_XPROP_EXECUTABLE)
+                    add_test(
+                        NAME loim_linux_window_icon_runtime_tests
+                        COMMAND sh
+                            "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_linux_window_icon_runtime.sh"
+                            $<TARGET_FILE:loimreader-test>
+                            "${LOIM_XVFB_RUN_EXECUTABLE}"
+                            "${LOIM_XPROP_EXECUTABLE}")
+                    set_tests_properties(
+                        loim_linux_window_icon_runtime_tests
+                        PROPERTIES TIMEOUT 30)
+                else()
+                    message(STATUS
+                        "Skipping Linux window icon runtime test: xvfb-run/xprop not found")
+                endif()
+            endif()
+            add_test(
                 NAME loim_release_manifest_tests
                 COMMAND sh
                     "${CMAKE_CURRENT_SOURCE_DIR}/tests/test_release_manifest.sh"
@@ -436,14 +569,14 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         if(LOIM_BUILD_DESKTOP)
             add_test(
                 NAME loim_persist_settings_smoke
-                COMMAND $<TARGET_FILE:loimreader> --persist-smoke-test)
+                COMMAND $<TARGET_FILE:loimreader-test> --persist-smoke-test)
             set_tests_properties(loim_persist_settings_smoke PROPERTIES
                 PASS_REGULAR_EXPRESSION "persist_smoke=pass")
         endif()
     endif()
 
     if(LOIM_INSTALL_DEVELOPMENT)
-        install(TARGETS loim_core
+        install(TARGETS loim_core loim_crypto
             EXPORT LoimReaderTargets
             ARCHIVE DESTINATION ${CMAKE_INSTALL_LIBDIR}
             LIBRARY DESTINATION ${CMAKE_INSTALL_LIBDIR}
@@ -452,6 +585,8 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         install(DIRECTORY include/loim/ DESTINATION ${CMAKE_INSTALL_INCLUDEDIR}/loim)
     endif()
 
+    # Strip installed release binaries; private build trees retain diagnostics.
+    set(CPACK_STRIP_FILES TRUE)
     set(LOIM_RELEASE_PLATFORM "" CACHE STRING
         "Canonical release platform (windows, linux, or macos)")
     set(LOIM_RELEASE_ARCH "" CACHE STRING
@@ -522,6 +657,9 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         set(CPACK_DMG_FORMAT "UDZO")
     else()
         set(CPACK_GENERATOR "DEB")
+        # The executable resolves its desktop icon relative to /usr/bin, and
+        # freedesktop desktop entries/icons belong under /usr/share.
+        set(CPACK_PACKAGING_INSTALL_PREFIX "/usr")
         set(CPACK_DEBIAN_PACKAGE_NAME "loimreader")
         set(CPACK_DEBIAN_PACKAGE_MAINTAINER "ctdy123.com")
         set(CPACK_DEBIAN_PACKAGE_SECTION "graphics")
@@ -529,8 +667,13 @@ if(NOT LOIM_BUILD_LEGACY_QT)
         set(CPACK_DEBIAN_PACKAGE_ARCHITECTURE "${LOIM_RELEASE_ARCH}")
         set(CPACK_DEBIAN_PACKAGE_HOMEPAGE "https://ctdy123.com/download/loimreader")
         set(CPACK_DEBIAN_PACKAGE_SHLIBDEPS ON)
-        set(CPACK_DEBIAN_PACKAGE_DEPENDS
-            "fonts-noto-cjk, cups-client, libsecret-tools")
+        # These improve the desktop experience but are not required to start
+        # the application. Keeping them as recommendations avoids rejecting a
+        # UOS/Kylin installation whose repository uses a different optional
+        # package set; dpkg-shlibdeps still generates the required libc/curl
+        # dependencies from the actual ELF binary.
+        set(CPACK_DEBIAN_PACKAGE_RECOMMENDS
+            "fonts-noto-cjk, xdg-utils, libsecret-tools, zenity, xdg-desktop-portal")
         string(REPLACE "-" "~" LOIM_DEBIAN_VERSION "${LOIM_VERSION_OVERRIDE}")
         set(CPACK_DEBIAN_PACKAGE_VERSION "${LOIM_DEBIAN_VERSION}")
         set(CPACK_DEBIAN_FILE_NAME "${CPACK_PACKAGE_FILE_NAME}.deb")

@@ -10,6 +10,22 @@ case "$architecture" in
     *) echo "unsupported architecture: $architecture" >&2; exit 2 ;;
 esac
 
+host_architecture=$(dpkg --print-architecture)
+if [[ "$host_architecture" != "$architecture" ]]; then
+    echo "container architecture is $host_architecture, requested $architecture" >&2
+    exit 2
+fi
+host_glibc=$(ldd --version 2>&1 |
+    sed -n '1s/.* \([0-9][0-9.]*\)$/\1/p')
+if [[ -z "$host_glibc" ]]; then
+    echo "cannot determine container glibc version" >&2
+    exit 2
+fi
+if dpkg --compare-versions "$host_glibc" gt 2.28; then
+    echo "container glibc $host_glibc is too new; use debian/eol:buster" >&2
+    exit 2
+fi
+
 export DEBIAN_FRONTEND=noninteractive
 if [[ -n "${LOIM_APT_MIRROR:-}" ]]; then
     sed -i \
@@ -19,16 +35,17 @@ if [[ -n "${LOIM_APT_MIRROR:-}" ]]; then
 fi
 apt-get update -qq
 apt-get install -y -qq --no-install-recommends \
-    build-essential ca-certificates cmake cups-client curl desktop-file-utils \
-    dpkg-dev file fonts-noto-cjk git python3 python3-pip \
-    libcurl4-openssl-dev libwayland-dev libx11-dev libxcursor-dev \
+    build-essential ca-certificates curl desktop-file-utils \
+    dpkg-dev file fonts-dejavu-core git jq python3 python3-pip \
+    libcurl4-openssl-dev libdbus-1-dev libwayland-dev libx11-dev libxcursor-dev \
     libxext-dev libxfixes-dev libxi-dev libxkbcommon-dev libxrandr-dev \
-    libxss-dev libxtst-dev
+    libxss-dev libxtst-dev xauth x11-utils xvfb
 pip_arguments=(--no-cache-dir -q)
 if [[ -n "${LOIM_PIP_INDEX_URL:-}" ]]; then
     pip_arguments+=(-i "$LOIM_PIP_INDEX_URL")
 fi
-python3 -m pip install "${pip_arguments[@]}" cmake
+python3 -m pip install "${pip_arguments[@]}" --upgrade pip==24.0
+python3 -m pip install "${pip_arguments[@]}" cmake==3.28.4
 export PATH="/usr/local/bin:$PATH"
 
 build_directory="build-linux-${architecture}-local"
@@ -67,6 +84,17 @@ dpkg-deb --control "$package" "$control_directory"
 test -x "$control_directory/postinst"
 grep -Fq -- '--ensure-desktop-shortcut' "$control_directory/postinst"
 dpkg-deb --extract "$package" "$extract_directory"
+sh tests/test_linux_deb_compatibility.sh \
+    "$package" "$extract_directory/usr/bin/LoimReader" "$architecture"
+if find "$extract_directory" -type f \
+    \( -iname '*qt*' -o -iname '*poppler*' \) | grep -q .; then
+    echo 'Legacy Qt/Poppler file found in Linux package' >&2
+    exit 1
+fi
+cmake \
+    -DLOIM_BINARY="$extract_directory/usr/bin/LoimReader" \
+    -DLOIM_STAGE_ROOT="$extract_directory/usr" \
+    -P scripts/check-runtime-dependencies.cmake
 desktop-file-validate \
     "$extract_directory/usr/share/applications/com.ctdy123.loimreader.desktop"
 for size in 16 24 32 48 64 128 256 512; do

@@ -152,6 +152,11 @@ loim_status loim_auth_build_login_json(
     writer_append_property(&writer, "currentVersion", request->app_version, true);
     writer_append_property(&writer, "platform", request->platform, true);
     writer_append_property(&writer, "architecture", request->architecture, true);
+    if (request->entitlement_nonce != NULL) {
+        writer_append(&writer, ",\"entitlementVersion\":1");
+        writer_append_property(&writer, "entitlementKeyId", loim_entitlement_key_id(), true);
+        writer_append_property(&writer, "entitlementNonce", request->entitlement_nonce, true);
+    }
     writer_append(&writer, "}");
     if (writer.failed) {
         output[0] = '\0';
@@ -170,52 +175,149 @@ static const char *skip_space(const char *cursor)
     return cursor;
 }
 
+/* Validate the response before extracting scoped members. Unknown fields remain
+ * forward compatible, but malformed JSON and duplicate object keys are rejected. */
 static const char *skip_json_string(const char *cursor)
 {
-    if (*cursor != '"') {
-        return NULL;
-    }
-    cursor += 1;
+    if (*cursor++ != '"') return NULL;
     while (*cursor != '\0') {
+        if ((unsigned char)*cursor < 0x20U) return NULL;
+        if (*cursor == '"') return cursor + 1;
         if (*cursor == '\\') {
-            if (cursor[1] == '\0') {
+            cursor += 1;
+            if (*cursor == '\0') return NULL;
+            if (*cursor == 'u') {
+                unsigned index;
+                for (index = 0U; index < 4U; ++index) {
+                    cursor += 1;
+                    if (!isxdigit((unsigned char)*cursor)) return NULL;
+                }
+            } else if (strchr("\"\\/bfnrt", *cursor) == NULL) {
                 return NULL;
             }
-            cursor += 2;
-        } else if (*cursor == '"') {
-            return cursor + 1;
-        } else {
-            cursor += 1;
         }
+        cursor += 1;
     }
     return NULL;
 }
 
-static const char *find_json_value(const char *json, const char *key)
+static bool extract_json_string(const char *value, char *output, size_t capacity);
+
+/* Earlier members have already been validated. Skip them without recursively
+ * validating again, so nested objects cannot multiply the amount of work. */
+static const char *skip_validated_json_value(const char *cursor)
 {
-    const char *cursor = json;
-    size_t key_length = strlen(key);
-
-    while (*cursor != '\0') {
-        const char *end;
-        const char *after;
-
-        if (*cursor != '"') {
-            cursor += 1;
+    unsigned nesting = 0U;
+    cursor = skip_space(cursor);
+    if (*cursor == '\"') return skip_json_string(cursor);
+    if (*cursor != '{' && *cursor != '[') {
+        while (*cursor != '\0' && *cursor != ',' && *cursor != '}' &&
+            *cursor != ']' && !isspace((unsigned char)*cursor)) cursor += 1;
+        return cursor;
+    }
+    do {
+        if (*cursor == '\"') {
+            cursor = skip_json_string(cursor);
+            if (cursor == NULL) return NULL;
             continue;
         }
-        end = skip_json_string(cursor);
-        if (end == NULL) {
-            return NULL;
-        }
-        if ((size_t)(end - cursor) == key_length + 2U &&
-            memcmp(cursor + 1, key, key_length) == 0) {
-            after = skip_space(end);
-            if (*after == ':') {
-                return skip_space(after + 1);
+        if (*cursor == '{' || *cursor == '[') nesting += 1U;
+        if (*cursor == '}' || *cursor == ']') nesting -= 1U;
+        cursor += 1;
+    } while (nesting != 0U && *cursor != '\0');
+    return nesting == 0U ? cursor : NULL;
+}
+
+static const char *skip_json_value(const char *cursor, unsigned depth)
+{
+    cursor = skip_space(cursor);
+    if (depth > 32U) return NULL;
+    if (*cursor == '"') return skip_json_string(cursor);
+    if (*cursor == '{' || *cursor == '[') {
+        bool object = *cursor == '{';
+        char close = object ? '}' : ']';
+        const char *members = skip_space(cursor + 1);
+        cursor = members;
+        if (*cursor == close) return cursor + 1;
+        for (;;) {
+            if (object) {
+                const char *key = cursor;
+                const char *end = skip_json_string(key);
+                const char *previous = members;
+                char key_name[256];
+                if (end == NULL || !extract_json_string(key, key_name, sizeof(key_name))) return NULL;
+                while (previous < key) {
+                    const char *previous_end = skip_json_string(previous);
+                    if (previous_end == NULL) return NULL;
+                    char previous_name[256];
+                    if (!extract_json_string(previous, previous_name, sizeof(previous_name)) ||
+                        strcmp(key_name, previous_name) == 0) return NULL;
+                    previous = skip_space(previous_end);
+                    if (*previous != ':') return NULL;
+                    previous = skip_validated_json_value(previous + 1);
+                    if (previous == NULL) return NULL;
+                    previous = skip_space(previous);
+                    if (*previous != ',') return NULL;
+                    previous = skip_space(previous + 1);
+                }
+                cursor = skip_space(end);
+                if (*cursor != ':') return NULL;
+                cursor += 1;
             }
+            cursor = skip_json_value(cursor, depth + 1U);
+            if (cursor == NULL) return NULL;
+            cursor = skip_space(cursor);
+            if (*cursor == close) return cursor + 1;
+            if (*cursor != ',') return NULL;
+            cursor = skip_space(cursor + 1);
         }
-        cursor = end;
+    }
+    if (strncmp(cursor, "true", 4U) == 0) return cursor + 4;
+    if (strncmp(cursor, "false", 5U) == 0) return cursor + 5;
+    if (strncmp(cursor, "null", 4U) == 0) return cursor + 4;
+    if (*cursor == '-') cursor += 1;
+    if (*cursor == '0') {
+        cursor += 1;
+    } else {
+        if (*cursor < '1' || *cursor > '9') return NULL;
+        do { cursor += 1; } while (isdigit((unsigned char)*cursor));
+    }
+    if (*cursor == '.') {
+        cursor += 1;
+        if (!isdigit((unsigned char)*cursor)) return NULL;
+        do { cursor += 1; } while (isdigit((unsigned char)*cursor));
+    }
+    if (*cursor == 'e' || *cursor == 'E') {
+        cursor += 1;
+        if (*cursor == '+' || *cursor == '-') cursor += 1;
+        if (!isdigit((unsigned char)*cursor)) return NULL;
+        do { cursor += 1; } while (isdigit((unsigned char)*cursor));
+    }
+    return cursor;
+}
+
+static const char *find_json_value(const char *json, const char *key)
+{
+    const char *cursor = skip_space(json);
+    if (*cursor != '{') return NULL;
+    cursor = skip_space(cursor + 1);
+    while (*cursor == '"') {
+        const char *end = skip_json_string(cursor);
+        const char *value;
+        if (end == NULL) return NULL;
+        value = skip_space(end);
+        if (*value != ':') return NULL;
+        value = skip_space(value + 1);
+        {
+            char name[256];
+            if (!extract_json_string(cursor, name, sizeof(name))) return NULL;
+            if (strcmp(name, key) == 0) return value;
+        }
+        cursor = skip_validated_json_value(value);
+        if (cursor == NULL) return NULL;
+        cursor = skip_space(cursor);
+        if (*cursor != ',') return NULL;
+        cursor = skip_space(cursor + 1);
     }
     return NULL;
 }
@@ -310,7 +412,7 @@ static bool extract_json_string(const char *value, char *output, size_t capacity
             default:
                 return false;
         }
-        if (!append_utf8(output, capacity, &length, decoded)) {
+        if (decoded == 0U || !append_utf8(output, capacity, &length, decoded)) {
             return false;
         }
         cursor += 1;
@@ -364,6 +466,18 @@ static bool ascii_equals_ignore_case(const char *left, const char *right)
     return *left == '\0' && *right == '\0';
 }
 
+static bool legacy_paid_subscription(const char *type)
+{
+    static const char *const types[] = {
+        "monthly", "yearly", "subscription", "team", "enterprise"
+    };
+    size_t index;
+    for (index = 0U; index < sizeof(types) / sizeof(types[0]); ++index) {
+        if (ascii_equals_ignore_case(type, types[index])) return true;
+    }
+    return false;
+}
+
 bool loim_auth_result_is_licensed(const loim_login_result *result)
 {
     if (result == NULL || !result->success) {
@@ -372,8 +486,7 @@ bool loim_auth_result_is_licensed(const loim_login_result *result)
     if (result->subscription_active_present) {
         return result->subscription_active;
     }
-    return result->subscription_type[0] != '\0' &&
-        !ascii_equals_ignore_case(result->subscription_type, "free");
+    return legacy_paid_subscription(result->subscription_type);
 }
 
 static loim_status parse_auth_response(
@@ -385,38 +498,42 @@ static loim_status parse_auth_response(
     const char *end;
     const char *subscription;
     const char *subscription_active;
+    const char *identity;
+    const char *expires;
 
     if (json == NULL || out_result == NULL) {
         return LOIM_ERROR_INVALID_ARGUMENT;
     }
     memset(out_result, 0, sizeof(*out_result));
     object = skip_space(json);
-    end = object + strlen(object);
-    while (end > object && isspace((unsigned char)end[-1]) != 0) {
-        end -= 1;
-    }
-    if (end <= object || *object != '{' || end[-1] != '}') {
+    end = skip_json_value(object, 0U);
+    if (*object != '{' || end == NULL || *skip_space(end) != '\0') {
         return LOIM_ERROR_INVALID_DATA;
     }
+    identity = find_json_value(json, "user");
+    if (identity == NULL) identity = json;
+    if (*identity != '{') return LOIM_ERROR_INVALID_DATA;
     if (!extract_bool(json, "success", &out_result->success) ||
         !extract_optional_string(json, "token", out_result->token, sizeof(out_result->token)) ||
-        !extract_optional_string(json, "email", out_result->email, sizeof(out_result->email)) ||
+        !extract_optional_string(identity, "email", out_result->email, sizeof(out_result->email)) ||
         !extract_optional_string(json, "error", out_result->error_code, sizeof(out_result->error_code)) ||
-        !extract_optional_string(json, "message", out_result->message, sizeof(out_result->message))) {
+        !extract_optional_string(json, "message", out_result->message, sizeof(out_result->message)) ||
+        !extract_optional_string(json, "entitlementPayload", out_result->entitlement_payload,
+            sizeof(out_result->entitlement_payload)) ||
+        !extract_optional_string(json, "entitlementSignature", out_result->entitlement_signature,
+            sizeof(out_result->entitlement_signature))) {
         return LOIM_ERROR_INVALID_DATA;
     }
-    subscription = find_json_value(json, "subscription");
+    subscription = find_json_value(identity, "subscription");
     if (subscription != NULL) {
-        if (!extract_optional_string(
-                subscription,
-                "type",
-                out_result->subscription_type,
-                sizeof(out_result->subscription_type))) {
+        if (*subscription != '{') return LOIM_ERROR_INVALID_DATA;
+        if (!extract_optional_string(subscription, "type",
+                out_result->subscription_type, sizeof(out_result->subscription_type))) {
             return LOIM_ERROR_INVALID_DATA;
         }
-        if (!extract_optional_string(
-                subscription,
-                "expiresAt",
+        expires = find_json_value(subscription, "expiresAt");
+        if (expires != NULL && strncmp(expires, "null", 4U) != 0 &&
+            !extract_optional_string(subscription, "expiresAt",
                 out_result->subscription_expires_at,
                 sizeof(out_result->subscription_expires_at))) {
             return LOIM_ERROR_INVALID_DATA;
@@ -424,10 +541,14 @@ static loim_status parse_auth_response(
         subscription_active = find_json_value(subscription, "active");
         if (subscription_active != NULL) {
             out_result->subscription_active_present = true;
-            if (!extract_bool(
-                    subscription, "active", &out_result->subscription_active)) {
+            if (!extract_bool(subscription, "active", &out_result->subscription_active)) {
                 return LOIM_ERROR_INVALID_DATA;
             }
+        }
+        if (out_result->success && !out_result->subscription_active_present &&
+            !ascii_equals_ignore_case(out_result->subscription_type, "free") &&
+            !legacy_paid_subscription(out_result->subscription_type)) {
+            return LOIM_ERROR_INVALID_DATA;
         }
     }
     if (find_json_value(json, "deviceLimitExceeded") != NULL &&
@@ -477,6 +598,11 @@ static loim_status build_session_json(
     writer_append_property(&writer, "platform", request->platform, true);
     writer_append_property(&writer, "architecture", request->architecture, true);
     writer_append_property(&writer, "clientName", "LoimReader", true);
+    if (request->entitlement_nonce != NULL) {
+        writer_append(&writer, ",\"entitlementVersion\":1");
+        writer_append_property(&writer, "entitlementKeyId", loim_entitlement_key_id(), true);
+        writer_append_property(&writer, "entitlementNonce", request->entitlement_nonce, true);
+    }
     writer_append(&writer, "}");
     return writer.failed ? LOIM_ERROR_OVERFLOW : LOIM_OK;
 }
@@ -513,7 +639,12 @@ loim_status loim_auth_login(
     if (status != LOIM_OK) {
         return status;
     }
-    return loim_auth_parse_login_response(response_json, out_result);
+    status = loim_auth_parse_login_response(response_json, out_result);
+    if (status == LOIM_OK && out_result->success &&
+        (*out_http_status < 200 || *out_http_status >= 300)) {
+        return LOIM_ERROR_INVALID_DATA;
+    }
+    return status;
 }
 
 loim_status loim_auth_restore_session(
@@ -553,7 +684,8 @@ loim_status loim_auth_restore_session(
         return status;
     }
     if (out_result->success &&
-        (out_result->email[0] == '\0' ||
+        (*out_http_status < 200 || *out_http_status >= 300 ||
+         out_result->email[0] == '\0' ||
          (!out_result->subscription_active_present &&
           out_result->subscription_type[0] == '\0'))) {
         return LOIM_ERROR_INVALID_DATA;

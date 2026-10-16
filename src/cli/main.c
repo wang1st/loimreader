@@ -21,7 +21,7 @@ static void loim_print_usage(const char *program)
     fprintf(stderr,
         "Usage: %s [--width PIXELS] IMAGE [IMAGE ...]\n"
         "\n"
-        "Probes multiple PNG/JPEG/GIF/BMP files and prints the A4 virtual-document\n"
+        "Probes multiple PNG/JPEG/GIF/BMP/WebP files and prints the A4 virtual-document\n"
         "page plan as JSON. Pixel decoding and rendering are intentionally separate.\n",
         program);
 }

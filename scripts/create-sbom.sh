@@ -69,6 +69,26 @@ jq -n \
         licenseConcluded: "MIT",
         licenseDeclared: "MIT",
         copyrightText: "Copyright (c) 2017 Sean Barrett"
+      },
+      {
+        SPDXID: "SPDXRef-Package-Monocypher",
+        name: "Monocypher",
+        versionInfo: "4.0.3",
+        downloadLocation: "https://monocypher.org/download/monocypher-4.0.3.tar.gz",
+        filesAnalyzed: false,
+        licenseConcluded: "BSD-2-Clause OR CC0-1.0",
+        licenseDeclared: "BSD-2-Clause OR CC0-1.0",
+        copyrightText: "Copyright (c) 2017-2023, Loup Vaillant and contributors"
+      },
+      {
+        SPDXID: "SPDXRef-Package-libwebp",
+        name: "libwebp",
+        versionInfo: "1.3.2",
+        downloadLocation: "git+https://github.com/libsdl-org/libwebp.git@42611dee80e9dd744e6fca13c11c682d36463b9d",
+        filesAnalyzed: false,
+        licenseConcluded: "BSD-3-Clause",
+        licenseDeclared: "BSD-3-Clause",
+        copyrightText: "Copyright (c) 2010, Google Inc."
       }
     ],
     relationships: [
@@ -91,6 +111,16 @@ jq -n \
         spdxElementId: "SPDXRef-Package-SDL3-image",
         relationshipType: "DEPENDS_ON",
         relatedSpdxElement: "SPDXRef-Package-stb-image"
+      },
+      {
+        spdxElementId: "SPDXRef-Package-LoimReader",
+        relationshipType: "DEPENDS_ON",
+        relatedSpdxElement: "SPDXRef-Package-libwebp"
+      },
+      {
+        spdxElementId: "SPDXRef-Package-LoimReader",
+        relationshipType: "DEPENDS_ON",
+        relatedSpdxElement: "SPDXRef-Package-Monocypher"
       }
     ]
   }' > "$output"

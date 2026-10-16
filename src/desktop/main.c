@@ -3,6 +3,7 @@
 #include <SDL3/SDL_main.h>
 #include <SDL3_image/SDL_image.h>
 #include <SDL3_ttf/SDL_ttf.h>
+#include <webp/decode.h>
 
 #include <stdbool.h>
 #include <inttypes.h>
@@ -48,13 +49,14 @@
 
 #include "http_client.h"
 #include "credential_store.h"
+#include "entitlement_store.h"
+#include "image_memory.h"
 
 #ifndef LOIM_APP_VERSION
 #define LOIM_APP_VERSION "dev"
 #endif
 
 #define LOIM_LAYOUT_WIDTH 1000U
-#define LOIM_MAX_IMAGE_PIXELS 100000000ULL
 #define LOIM_MAX_AUTO_HINTS 4096U
 #define LOIM_TOOLBAR_HEIGHT 58.0F
 #define LOIM_STATUSBAR_HEIGHT 22.0F
@@ -128,6 +130,9 @@ typedef struct app_auth_task {
     Uint32 completion_event;
     SDL_AtomicInt completion_state;
     bool restore_session;
+    bool background_refresh;
+    bool entitlement_verified;
+    char entitlement_nonce[LOIM_ENTITLEMENT_NONCE_CAPACITY];
     char email[256];
     char password[256];
     char machine_code[64];
@@ -201,6 +206,7 @@ typedef struct app_state {
     bool quit_after_dialog;
     bool headless;
     bool persist_settings;
+    bool window_icon_set;
     bool running;
     Uint32 dialog_event;
     Uint32 import_event;
@@ -218,6 +224,7 @@ typedef struct app_state {
     bool login_submitting;
     bool logged_in;
     bool licensed;
+    Uint64 auth_refresh_due;
     app_login_focus login_focus;
     char login_email[256];
     char login_password[256];
@@ -251,7 +258,10 @@ typedef struct app_state {
     size_t columns;
     bool import_progress_active;
     bool workspace_ready;
+#if defined(LOIM_INTERNAL_TESTS)
     bool test_force_import_completion_failure;
+    bool test_force_watermark_failure;
+#endif
     size_t export_columns;
     float export_margin_ratio;
     bool export_licensed;
@@ -262,11 +272,11 @@ typedef struct app_state {
 } app_state;
 
 static const SDL_DialogFileFilter app_image_filters_en[] = {
-    {"Image files", "png;jpg;jpeg;gif;bmp"}
+    {"Image files", "png;jpg;jpeg;gif;bmp;webp"}
 };
 
 static const SDL_DialogFileFilter app_image_filters_zh[] = {
-    {"图像文件", "png;jpg;jpeg;gif;bmp"}
+    {"图像文件", "png;jpg;jpeg;gif;bmp;webp"}
 };
 
 
@@ -388,6 +398,63 @@ static loim_locale app_system_locale(void)
 }
 
 #if !defined(_WIN32) && !defined(__APPLE__)
+static bool app_set_linux_window_icon(SDL_Window *window)
+{
+    static const char *const relative_paths[] = {
+        "../share/icons/hicolor/64x64/apps/com.ctdy123.loimreader.png",
+        "com.ctdy123.loimreader.png"
+    };
+    const char *base_path = SDL_GetBasePath();
+    SDL_Surface *icon = NULL;
+    bool applied;
+    size_t index;
+
+    if (window == NULL || base_path == NULL) {
+        (void)fprintf(
+            stderr, "Cannot resolve the Linux window icon base path: %s\n",
+            SDL_GetError());
+        SDL_ClearError();
+        return false;
+    }
+    for (index = 0U;
+         index < sizeof(relative_paths) / sizeof(relative_paths[0]);
+         ++index) {
+        char *path = NULL;
+        SDL_PathInfo path_info;
+
+        if (SDL_asprintf(&path, "%s%s", base_path, relative_paths[index]) >= 0 &&
+            SDL_GetPathInfo(path, &path_info) &&
+            path_info.type == SDL_PATHTYPE_FILE) {
+            icon = IMG_Load(path);
+        }
+        SDL_free(path);
+        if (icon != NULL) {
+            break;
+        }
+    }
+    if (icon == NULL) {
+        (void)fprintf(
+            stderr,
+            "Cannot load the packaged Linux window icon near %s\n",
+            base_path);
+        SDL_ClearError();
+        return false;
+    }
+    applied = SDL_SetWindowIcon(window, icon);
+    if (!applied) {
+        /* Older Wayland compositors lack xdg-toplevel-icon-v1. They still
+         * resolve this icon through the matching reverse-domain desktop ID. */
+        (void)fprintf(
+            stderr,
+            "Linux compositor rejected the explicit window icon; using the "
+            "desktop-entry icon: %s\n",
+            SDL_GetError());
+    }
+    SDL_DestroySurface(icon);
+    SDL_ClearError();
+    return applied;
+}
+
 static loim_shortcut_result app_ensure_linux_desktop_shortcut(bool force)
 {
     static const char installed_entry[] =
@@ -937,7 +1004,7 @@ static bool app_clear_saved_session(app_state *app)
 static int SDLCALL app_auth_thread_main(void *userdata)
 {
     app_auth_task *task = userdata;
-    loim_login_request request;
+    loim_login_request request = {0};
     SDL_Event event;
 
     request.email = task->email;
@@ -947,7 +1014,10 @@ static int SDLCALL app_auth_thread_main(void *userdata)
     request.architecture = task->architecture;
     request.os_name = task->os_name;
     request.app_version = LOIM_APP_VERSION;
-    if (task->restore_session) {
+    request.entitlement_nonce = task->entitlement_nonce;
+    if (!loim_entitlement_nonce(task->entitlement_nonce)) {
+        task->status = LOIM_ERROR_IO;
+    } else if (task->restore_session) {
         task->status = loim_auth_restore_session(
             &request,
             task->token,
@@ -962,6 +1032,18 @@ static int SDLCALL app_auth_thread_main(void *userdata)
             NULL,
             &task->result,
             &task->http_status);
+    }
+    if (task->status == LOIM_OK && task->result.success) {
+        loim_entitlement entitlement;
+        task->status = loim_entitlement_verify(
+            task->result.entitlement_payload, task->result.entitlement_signature,
+            task->machine_code, task->result.email, task->entitlement_nonce,
+            0U, &entitlement);
+        if (task->status == LOIM_OK &&
+            entitlement.licensed != loim_auth_result_is_licensed(&task->result)) {
+            task->status = LOIM_ERROR_INVALID_DATA;
+        }
+        task->entitlement_verified = task->status == LOIM_OK;
     }
     SDL_zero(event);
     event.type = task->completion_event;
@@ -1084,7 +1166,7 @@ static void app_submit_login(app_state *app)
     }
 }
 
-static void app_submit_session_restore(app_state *app)
+static void app_submit_session_restore(app_state *app, bool background)
 {
     app_auth_task *task;
 
@@ -1094,11 +1176,12 @@ static void app_submit_session_restore(app_state *app)
     }
     task = SDL_calloc(1U, sizeof(*task));
     if (task == NULL) {
-        app_open_login(app);
+        if (!background) app_open_login(app);
         return;
     }
     task->completion_event = app->auth_event;
     task->restore_session = true;
+    task->background_refresh = background;
     app_copy_text(task->email, sizeof(task->email), app->login_email);
     app_copy_text(task->password, sizeof(task->password), app->login_password);
     app_copy_text(task->token, sizeof(task->token), app->auth_token);
@@ -1112,27 +1195,56 @@ static void app_submit_session_restore(app_state *app)
         app->login_message,
         sizeof(app->login_message),
         app_translation(app, LOIM_TEXT_RESTORING_LOGIN));
-    app_set_status(app, app_translation(app, LOIM_TEXT_RESTORING_LOGIN));
+    if (!background) app_set_status(app, app_translation(app, LOIM_TEXT_RESTORING_LOGIN));
     app->auth_thread = SDL_CreateThread(app_auth_thread_main, "loim-session", task);
     if (app->auth_thread == NULL) {
         app->auth_task = NULL;
         app->login_submitting = false;
         app_auth_task_destroy(task);
-        app_open_login(app);
+        if (!background) app_open_login(app);
     }
 }
 
 static bool app_session_is_invalid(const app_auth_task *task)
 {
-    return task->restore_session && task->status == LOIM_OK &&
-        (task->http_status == 401 || task->http_status == 403 ||
-         task->http_status == 404);
+    return task->restore_session && task->status == LOIM_OK && !task->result.success &&
+        (task->http_status == 401 || task->http_status == 403 || task->http_status == 404) &&
+        (strcmp(task->result.error_code, "UNAUTHORIZED") == 0 ||
+         strcmp(task->result.error_code, "TOKEN_EXPIRED") == 0 ||
+         strcmp(task->result.error_code, "INVALID_TOKEN") == 0 ||
+         strcmp(task->result.error_code, "DEVICE_NOT_FOUND") == 0 ||
+         strcmp(task->result.error_code, "USER_NOT_FOUND") == 0 ||
+         strcmp(task->result.error_code, "ACCOUNT_DISABLED") == 0);
 }
 
 static bool app_session_restore_pending(const app_state *app)
 {
     return app->login_submitting && app->auth_task != NULL &&
-        app->auth_task->restore_session;
+        app->auth_task->restore_session && !app->auth_task->background_refresh;
+}
+
+/* A transport/protocol failure never erases an existing confirmed entitlement.
+ * A validated server denial changes only subsequent export snapshots. */
+static bool app_auth_result_has_details(const loim_login_result *result)
+{
+    return result->email[0] != '\0' &&
+        (result->subscription_active_present || result->subscription_type[0] != '\0');
+}
+
+static void app_apply_background_auth(app_state *app, const app_auth_task *task)
+{
+    if (task->status == LOIM_OK && task->result.success && task->entitlement_verified &&
+        app_auth_result_has_details(&task->result)) {
+        app->licensed = loim_auth_result_is_licensed(&task->result);
+        app_copy_text(app->subscription_type, sizeof(app->subscription_type),
+            task->result.subscription_type);
+        app_copy_text(app->subscription_expires_at, sizeof(app->subscription_expires_at),
+            task->result.subscription_expires_at);
+    } else if (app_session_is_invalid(task)) {
+        app->licensed = false;
+        loim_entitlement_cache_clear();
+        app_set_status(app, app_translation(app, LOIM_TEXT_SESSION_EXPIRED));
+    }
 }
 
 static void app_handle_auth_event(app_state *app, SDL_Event *event)
@@ -1147,6 +1259,24 @@ static void app_handle_auth_event(app_state *app, SDL_Event *event)
     (void)SDL_SetAtomicInt(
         &task->completion_state, APP_COMPLETION_HANDLED);
     app->login_submitting = false;
+    /* Missing account/entitlement data is a protocol failure, not proof that
+     * an existing subscriber has become a free user. */
+    if (task->status == LOIM_OK && task->result.success &&
+        (!task->entitlement_verified || !app_auth_result_has_details(&task->result))) {
+        task->status = LOIM_ERROR_INVALID_DATA;
+    }
+    app->auth_refresh_due = SDL_GetTicks() + 15U * 60U * 1000U;
+    if (task->status == LOIM_OK && task->result.success) {
+        if (!loim_auth_result_is_licensed(&task->result)) loim_entitlement_cache_clear();
+        (void)loim_entitlement_cache_save(
+            task->result.entitlement_payload, task->result.entitlement_signature);
+    }
+    if (task->background_refresh) {
+        app_apply_background_auth(app, task);
+        app->auth_task = NULL;
+        app_auth_task_destroy(task);
+        return;
+    }
     if (task->status == LOIM_OK && task->result.success) {
         bool credentials_saved = task->restore_session || app_save_credentials(task);
 
@@ -1217,6 +1347,7 @@ static void app_handle_auth_event(app_state *app, SDL_Event *event)
         app_secure_zero(app->login_password, sizeof(app->login_password));
     } else if (task->restore_session) {
         if (app_session_is_invalid(task)) {
+            loim_entitlement_cache_clear();
             app_secure_zero(app->auth_token, sizeof(app->auth_token));
             (void)app_clear_saved_session(app);
         }
@@ -1226,6 +1357,16 @@ static void app_handle_auth_event(app_state *app, SDL_Event *event)
     }
     app->auth_task = NULL;
     app_auth_task_destroy(task);
+}
+
+static void app_poll_auth_refresh(app_state *app)
+{
+    if (!app->headless && app->logged_in && !app->login_open && !app->login_submitting &&
+        !app->dialog_open && app->auth_refresh_due != 0U &&
+        SDL_GetTicks() >= app->auth_refresh_due) {
+        app->auth_refresh_due = SDL_GetTicks() + 15U * 60U * 1000U;
+        app_submit_session_restore(app, true);
+    }
 }
 
 static void app_poll_auth_completion(app_state *app)
@@ -1513,6 +1654,61 @@ static void app_import_result_destroy(app_import_result *result)
     SDL_free(result);
 }
 
+static loim_status app_decode_webp(
+    const char *path,
+    const loim_image_info *probe,
+    SDL_Surface **out_surface)
+{
+    void *encoded;
+    size_t encoded_size = 0U;
+    SDL_Surface *surface;
+    size_t output_size;
+    int decoded_width = 0;
+    int decoded_height = 0;
+
+    encoded = SDL_LoadFile(path, &encoded_size);
+    if (encoded == NULL) {
+        return LOIM_ERROR_IO;
+    }
+    if (!WebPGetInfo(
+            (const uint8_t *)encoded,
+            encoded_size,
+            &decoded_width,
+            &decoded_height) ||
+        decoded_width <= 0 || decoded_height <= 0 ||
+        (uint32_t)decoded_width != probe->width_px ||
+        (uint32_t)decoded_height != probe->height_px) {
+        SDL_free(encoded);
+        return LOIM_ERROR_CORRUPT_IMAGE;
+    }
+    surface = SDL_CreateSurface(
+        decoded_width, decoded_height, SDL_PIXELFORMAT_RGBA32);
+    if (surface == NULL) {
+        SDL_free(encoded);
+        return LOIM_ERROR_OUT_OF_MEMORY;
+    }
+    if (surface->pitch <= 0 || surface->h <= 0 ||
+        (size_t)surface->pitch > SIZE_MAX / (size_t)surface->h) {
+        SDL_DestroySurface(surface);
+        SDL_free(encoded);
+        return LOIM_ERROR_OVERFLOW;
+    }
+    output_size = (size_t)surface->pitch * (size_t)surface->h;
+    if (WebPDecodeRGBAInto(
+            (const uint8_t *)encoded,
+            encoded_size,
+            (uint8_t *)surface->pixels,
+            output_size,
+            surface->pitch) == NULL) {
+        SDL_DestroySurface(surface);
+        SDL_free(encoded);
+        return LOIM_ERROR_CORRUPT_IMAGE;
+    }
+    SDL_free(encoded);
+    *out_surface = surface;
+    return LOIM_OK;
+}
+
 static loim_status app_decode_image(
     const char *path,
     loim_image_info *out_probe,
@@ -1523,6 +1719,8 @@ static loim_status app_decode_image(
     SDL_Surface *rgba = NULL;
     loim_status status;
     uint64_t pixel_count;
+    uint64_t pixel_budget;
+    int ram_mib;
 
     if (path == NULL || out_probe == NULL || out_surface == NULL) {
         return LOIM_ERROR_INVALID_ARGUMENT;
@@ -1533,17 +1731,38 @@ static loim_status app_decode_image(
         return status;
     }
     pixel_count = (uint64_t)probe.width_px * (uint64_t)probe.height_px;
-    if (pixel_count > LOIM_MAX_IMAGE_PIXELS) {
+    if (probe.width_px > (uint32_t)(INT_MAX / 4) || probe.height_px > INT_MAX ||
+        pixel_count > SIZE_MAX / 12U) {
         return LOIM_ERROR_OVERFLOW;
     }
-    loaded = IMG_Load(path);
-    if (loaded == NULL) {
-        return LOIM_ERROR_CORRUPT_IMAGE;
-    }
-    rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
-    SDL_DestroySurface(loaded);
-    if (rgba == NULL) {
+    ram_mib = SDL_GetSystemRAM();
+    pixel_budget = loim_image_pixel_budget(
+        ram_mib > 0 ? (uint64_t)ram_mib * 1024U * 1024U : 0U,
+        loim_available_memory_bytes());
+    if (pixel_count > pixel_budget) {
+        SDL_Log("Image memory budget exceeded: %" PRIu64 " pixels, budget %" PRIu64,
+            pixel_count, pixel_budget);
         return LOIM_ERROR_OUT_OF_MEMORY;
+    }
+    if (probe.format == LOIM_IMAGE_FORMAT_WEBP) {
+        status = app_decode_webp(path, &probe, &rgba);
+        if (status != LOIM_OK) {
+            return status;
+        }
+    } else {
+        loaded = IMG_Load(path);
+        if (loaded == NULL) {
+            return LOIM_ERROR_CORRUPT_IMAGE;
+        }
+        if (loaded->format == SDL_PIXELFORMAT_RGBA32) {
+            rgba = loaded;
+        } else {
+            rgba = SDL_ConvertSurface(loaded, SDL_PIXELFORMAT_RGBA32);
+            SDL_DestroySurface(loaded);
+        }
+        if (rgba == NULL) {
+            return LOIM_ERROR_OUT_OF_MEMORY;
+        }
     }
     if (rgba->w <= 0 || rgba->h <= 0 ||
         (uint32_t)rgba->w != probe.width_px || (uint32_t)rgba->h != probe.height_px) {
@@ -1807,8 +2026,10 @@ static void app_start_next_import(app_state *app)
             continue;
         }
         result->generation = app->import_generation;
+#if defined(LOIM_INTERNAL_TESTS)
         result->force_completion_failure =
             app->test_force_import_completion_failure;
+#endif
         result->path = SDL_strdup(path);
         result->completion_event = app->import_event;
         if (result->path == NULL) {
@@ -2032,9 +2253,7 @@ static bool app_grid_destination(
     destination->w = column_width * stack_scale;
     destination->h = current_height * stack_scale;
     destination->x = column_x + (column_width - destination->w) / 2.0F;
-    destination->y = content_y +
-        (content_height - unscaled_stack_height * stack_scale) / 2.0F +
-        preceding_height * stack_scale;
+    destination->y = content_y + preceding_height * stack_scale;
     return true;
 }
 
@@ -4692,7 +4911,10 @@ static void app_destroy(app_state *app)
     SDL_Quit();
 }
 
-static bool app_initialize(app_state *app, bool headless)
+static bool app_initialize(
+    app_state *app,
+    bool headless,
+    bool isolated_integration_test)
 {
     loim_status status;
     bool saved_credentials = false;
@@ -4710,7 +4932,7 @@ static bool app_initialize(app_state *app, bool headless)
     app->import_generation = 1U;
     app->headless = headless;
     app->running = true;
-    if (!headless) {
+    if (!headless && !isolated_integration_test) {
         app_load_settings(app);
         if (loim_edition_is_pro()) {
             saved_credentials = app_load_saved_credentials(app);
@@ -4730,6 +4952,17 @@ static bool app_initialize(app_state *app, bool headless)
         app->document = NULL;
         return false;
     }
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if (!SDL_SetHintWithPriority(
+            SDL_HINT_APP_ID,
+            "com.ctdy123.loimreader",
+            SDL_HINT_OVERRIDE)) {
+        (void)fprintf(stderr, "Cannot set the Linux application ID: %s\n", SDL_GetError());
+        loim_document_destroy(app->document);
+        app->document = NULL;
+        return false;
+    }
+#endif
     if (!SDL_SetAppMetadata(
             "LoimReader", LOIM_APP_VERSION, "com.ctdy123.loimreader")) {
         (void)fprintf(stderr, "Cannot set application metadata: %s\n", SDL_GetError());
@@ -4741,6 +4974,11 @@ static bool app_initialize(app_state *app, bool headless)
         (void)SDL_SetHint(SDL_HINT_VIDEO_DRIVER, "dummy");
         window_flags |= SDL_WINDOW_HIDDEN;
     }
+#if !defined(_WIN32) && !defined(__APPLE__)
+    /* Set _NET_WM_ICON before the first map. Some older UKUI/DDE panels only
+     * sample a window icon when it first becomes visible. */
+    window_flags |= SDL_WINDOW_HIDDEN;
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO)) {
         (void)fprintf(stderr, "SDL initialization failed: %s\n", SDL_GetError());
         loim_document_destroy(app->document);
@@ -4761,6 +4999,11 @@ static bool app_initialize(app_state *app, bool headless)
         app_destroy(app);
         return false;
     }
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if (!headless) {
+        app->window_icon_set = app_set_linux_window_icon(app->window);
+    }
+#endif
     if (!TTF_Init()) {
         (void)fprintf(stderr, "Font engine initialization failed: %s\n", SDL_GetError());
         app_destroy(app);
@@ -4778,6 +5021,15 @@ static bool app_initialize(app_state *app, bool headless)
     if (!headless) {
         app_apply_window_geometry(app);
     }
+#if !defined(_WIN32) && !defined(__APPLE__)
+    if (!headless && !SDL_ShowWindow(app->window)) {
+        (void)fprintf(
+            stderr, "Cannot show the Linux application window: %s\n",
+            SDL_GetError());
+        app_destroy(app);
+        return false;
+    }
+#endif
     app->dialog_event = SDL_RegisterEvents(5);
     if (app->dialog_event == 0U) {
         (void)fprintf(stderr, "Cannot allocate file dialog event: %s\n", SDL_GetError());
@@ -4788,7 +5040,7 @@ static bool app_initialize(app_state *app, bool headless)
     app->auth_event = app->dialog_event + 2U;
     app->export_event = app->dialog_event + 3U;
     app->update_event = app->dialog_event + 4U;
-    if (!headless) {
+    if (!headless && !isolated_integration_test) {
         app->http_ready = loim_http_initialize();
         if (app->http_ready) {
             app->machine_code_ready = app_initialize_machine_code(app);
@@ -4802,23 +5054,36 @@ static bool app_initialize(app_state *app, bool headless)
             ? app_translation(app, LOIM_TEXT_READY)
             : app_translation(app, LOIM_TEXT_LOGIN_UNAVAILABLE));
     if (saved_credentials && app->http_ready && app->machine_code_ready) {
+        loim_entitlement cached;
+        time_t cache_now = time(NULL);
+        bool restored = loim_entitlement_cache_load(app->machine_code, app->login_email,
+            cache_now > 0 ? (uint64_t)cache_now : 0U, &cached);
+        if (restored) {
+            app->logged_in = true;
+            app->licensed = cached.licensed;
+            app_copy_text(app->account_email, sizeof(app->account_email), cached.account);
+            app_copy_text(app->subscription_type, sizeof(app->subscription_type),
+                cached.licensed ? "subscription" : "free");
+            app->auth_refresh_due = SDL_GetTicks() + 15U * 60U * 1000U;
+        }
         if (app->auth_token[0] != '\0') {
-            app_submit_session_restore(app);
+            app_submit_session_restore(app, restored);
         } else {
             app_open_login(app);
         }
     }
 #if !defined(_WIN32) && !defined(__APPLE__)
-    if (!headless) {
+    if (!headless && !isolated_integration_test) {
         (void)app_ensure_linux_desktop_shortcut(false);
     }
 #endif
     /* Only persist once initialization fully succeeded, so a failed startup
      * never overwrites the user's saved preferences with defaults. */
-    app->persist_settings = !headless;
+    app->persist_settings = !headless && !isolated_integration_test;
     return true;
 }
 
+#if defined(LOIM_INTERNAL_TESTS)
 static bool app_wait_for_import_idle(app_state *app, Uint64 timeout_ms)
 {
     Uint64 started = SDL_GetTicks();
@@ -4895,10 +5160,58 @@ static bool app_run_async_clear_smoke(
     return success;
 }
 
+#if !defined(_WIN32) && !defined(__APPLE__)
+static bool app_run_linux_window_icon_smoke(
+    app_state *app,
+    const char *completion_path)
+{
+    Uint64 deadline = SDL_GetTicks() + 20000U;
+    bool completed = false;
+
+    if (!app->window_icon_set ||
+        !SDL_SetWindowTitle(app->window, "LoimReaderWindowIconSmoke")) {
+        (void)fprintf(
+            stderr, "Linux window icon smoke setup failed: %s\n",
+            SDL_GetError());
+        return false;
+    }
+    (void)printf(
+        "window_icon=ready app_id=com.ctdy123.loimreader\n");
+    (void)fflush(stdout);
+    while (SDL_GetTicks() < deadline) {
+        SDL_Event event;
+        SDL_PathInfo completion_info;
+
+        while (SDL_PollEvent(&event)) {
+            if (event.type == SDL_EVENT_QUIT) {
+                return false;
+            }
+        }
+        if (SDL_GetPathInfo(completion_path, &completion_info) &&
+            completion_info.type == SDL_PATHTYPE_FILE) {
+            completed = true;
+            break;
+        }
+        SDL_ClearError();
+        SDL_Delay(10U);
+    }
+    (void)printf(
+        "window_icon=%s app_id=com.ctdy123.loimreader\n",
+        completed ? "pass" : "timeout");
+    return completed;
+}
+#endif
+
+#include "../../tests/desktop_hardening.inc"
+#endif
+
 int main(int argc, char **argv)
 {
     app_state app;
     SDL_Event event;
+    bool ensure_desktop_shortcut = argc == 2 &&
+        strcmp(argv[1], "--ensure-desktop-shortcut") == 0;
+#if defined(LOIM_INTERNAL_TESTS)
     bool smoke_test = argc > 1 && strcmp(argv[1], "--smoke-test") == 0;
     bool export_smoke_test = argc > 1 &&
         strcmp(argv[1], "--export-smoke-test") == 0;
@@ -4906,11 +5219,45 @@ int main(int argc, char **argv)
         strcmp(argv[1], "--async-clear-smoke-test") == 0;
     bool persist_smoke_test = argc > 1 &&
         strcmp(argv[1], "--persist-smoke-test") == 0;
-    bool ensure_desktop_shortcut = argc == 2 &&
-        strcmp(argv[1], "--ensure-desktop-shortcut") == 0;
+    bool window_icon_smoke_test = argc > 1 &&
+        strcmp(argv[1], "--window-icon-smoke-test") == 0;
     bool headless = smoke_test || export_smoke_test || async_clear_smoke_test ||
         persist_smoke_test;
     int first_path = smoke_test ? 2 : export_smoke_test ? 6 : 1;
+    if (argc == 7 && strcmp(argv[1], "--verify-entitlement-test") == 0) {
+        char *payload = SDL_LoadFile(argv[2], NULL);
+        char *signature = SDL_LoadFile(argv[3], NULL);
+        loim_entitlement entitlement;
+        bool success = payload != NULL && signature != NULL &&
+            loim_entitlement_verify(payload, signature, argv[4], argv[5], argv[6],
+                0U, &entitlement) == LOIM_OK;
+        if (success) {
+            loim_entitlement cached;
+            time_t now = time(NULL);
+            success = loim_entitlement_cache_save(payload, signature) &&
+                loim_entitlement_cache_load(argv[4], argv[5],
+                    now > 0 ? (uint64_t)now : 0U, &cached) &&
+                cached.licensed == entitlement.licensed;
+            loim_entitlement_cache_clear();
+        }
+        (void)printf("entitlement_verified=%d licensed=%d\n",
+            success ? 1 : 0, success && entitlement.licensed ? 1 : 0);
+        SDL_free(payload);
+        SDL_free(signature);
+        return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+    if (argc > 1 && strcmp(argv[1], "--hardening-test") == 0) {
+        return app_run_hardening_tests() ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+#else
+    bool headless = false;
+    bool window_icon_smoke_test = false;
+    int first_path = 1;
+    if (argc > 1 && strncmp(argv[1], "--", 2U) == 0 && !ensure_desktop_shortcut) {
+        (void)fprintf(stderr, "Unsupported option\n");
+        return EXIT_FAILURE;
+    }
+#endif
 
     if (ensure_desktop_shortcut) {
 #if !defined(_WIN32) && !defined(__APPLE__)
@@ -4931,6 +5278,7 @@ int main(int argc, char **argv)
 #endif
     }
 
+#if defined(LOIM_INTERNAL_TESTS)
     if (async_clear_smoke_test && argc != 4) {
         (void)fprintf(
             stderr,
@@ -4938,6 +5286,18 @@ int main(int argc, char **argv)
             argv[0]);
         return EXIT_FAILURE;
     }
+    if (window_icon_smoke_test && argc != 3) {
+        (void)fprintf(
+            stderr,
+            "usage: %s --window-icon-smoke-test completion-file\n",
+            argv[0]);
+        return EXIT_FAILURE;
+    }
+#if defined(_WIN32) || defined(__APPLE__)
+    if (window_icon_smoke_test) {
+        return EXIT_FAILURE;
+    }
+#endif
 
     if (export_smoke_test) {
         (void)fprintf(
@@ -4947,10 +5307,20 @@ int main(int argc, char **argv)
         return EXIT_FAILURE;
     }
 
-    if (!app_initialize(&app, headless)) {
+#endif
+    if (!app_initialize(&app, headless, window_icon_smoke_test)) {
         return EXIT_FAILURE;
     }
+#if defined(LOIM_INTERNAL_TESTS) && !defined(_WIN32) && !defined(__APPLE__)
+    if (window_icon_smoke_test) {
+        bool success = app_run_linux_window_icon_smoke(&app, argv[2]);
+
+        app_destroy(&app);
+        return success ? EXIT_SUCCESS : EXIT_FAILURE;
+    }
+#endif
     app_start_update_check(&app);
+#if defined(LOIM_INTERNAL_TESTS)
     if (async_clear_smoke_test) {
         bool success = app_run_async_clear_smoke(&app, argv[2], argv[3]);
 
@@ -5020,6 +5390,7 @@ int main(int argc, char **argv)
         }
         return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
+#endif
     if (argc > first_path) {
         path_batch startup = {0};
         int index;
@@ -5030,6 +5401,7 @@ int main(int argc, char **argv)
         app_import_batch(&app, &startup);
         path_batch_destroy(&startup);
     }
+#if defined(LOIM_INTERNAL_TESTS)
     if (smoke_test) {
         bool success = app.image_count == (size_t)(argc - first_path) &&
             app.layout.page_count > 0U &&
@@ -5039,6 +5411,7 @@ int main(int argc, char **argv)
         app_destroy(&app);
         return success ? EXIT_SUCCESS : EXIT_FAILURE;
     }
+#endif
     while (app.running) {
         while (SDL_PollEvent(&event)) {
             app_handle_event(&app, &event);
@@ -5046,6 +5419,7 @@ int main(int argc, char **argv)
         app_poll_file_dialog_completion(&app);
         app_poll_import_completion(&app);
         app_poll_auth_completion(&app);
+        app_poll_auth_refresh(&app);
         app_poll_update_completion(&app);
         app_render(&app);
         SDL_Delay(8U);

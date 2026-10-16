@@ -76,6 +76,13 @@ static uint32_t loim_read_le32(const uint8_t *bytes)
            ((uint32_t)bytes[3] << 24U);
 }
 
+static uint32_t loim_read_le24(const uint8_t *bytes)
+{
+    return (uint32_t)bytes[0] |
+           ((uint32_t)bytes[1] << 8U) |
+           ((uint32_t)bytes[2] << 16U);
+}
+
 static loim_status loim_validate_dimensions(loim_image_info *info)
 {
     if (info->width_px == 0U || info->height_px == 0U) {
@@ -151,6 +158,45 @@ static loim_status loim_probe_bmp(
     out_info->format = LOIM_IMAGE_FORMAT_BMP;
     out_info->width_px = width;
     out_info->height_px = raw_height;
+    return loim_validate_dimensions(out_info);
+}
+
+static loim_status loim_probe_webp(
+    const uint8_t *header,
+    size_t header_size,
+    loim_image_info *out_info)
+{
+    if (header_size < 20U) {
+        return LOIM_ERROR_CORRUPT_IMAGE;
+    }
+    if (memcmp(header + 12U, "VP8 ", 4U) == 0) {
+        if (header_size < 30U || loim_read_le32(header + 16U) < 10U ||
+            header[23] != 0x9DU || header[24] != 0x01U ||
+            header[25] != 0x2AU) {
+            return LOIM_ERROR_CORRUPT_IMAGE;
+        }
+        out_info->width_px = (uint32_t)loim_read_le16(header + 26U) & 0x3FFFU;
+        out_info->height_px = (uint32_t)loim_read_le16(header + 28U) & 0x3FFFU;
+    } else if (memcmp(header + 12U, "VP8L", 4U) == 0) {
+        if (header_size < 25U || loim_read_le32(header + 16U) < 5U ||
+            header[20] != 0x2FU) {
+            return LOIM_ERROR_CORRUPT_IMAGE;
+        }
+        out_info->width_px = 1U + (uint32_t)header[21] +
+            (((uint32_t)header[22] & 0x3FU) << 8U);
+        out_info->height_px = 1U + (((uint32_t)header[22] & 0xC0U) >> 6U) +
+            ((uint32_t)header[23] << 2U) +
+            (((uint32_t)header[24] & 0x0FU) << 10U);
+    } else if (memcmp(header + 12U, "VP8X", 4U) == 0) {
+        if (header_size < 30U || loim_read_le32(header + 16U) < 10U) {
+            return LOIM_ERROR_CORRUPT_IMAGE;
+        }
+        out_info->width_px = 1U + loim_read_le24(header + 24U);
+        out_info->height_px = 1U + loim_read_le24(header + 27U);
+    } else {
+        return LOIM_ERROR_CORRUPT_IMAGE;
+    }
+    out_info->format = LOIM_IMAGE_FORMAT_WEBP;
     return loim_validate_dimensions(out_info);
 }
 
@@ -255,6 +301,9 @@ loim_status loim_image_probe_file(const char *path, loim_image_info *out_info)
         status = loim_probe_bmp(file, header, bytes_read, out_info);
     } else if (bytes_read >= 2U && header[0] == 0xFFU && header[1] == 0xD8U) {
         status = loim_probe_jpeg(file, out_info);
+    } else if (bytes_read >= 12U && memcmp(header, "RIFF", 4U) == 0 &&
+               memcmp(header + 8U, "WEBP", 4U) == 0) {
+        status = loim_probe_webp(header, bytes_read, out_info);
     } else {
         status = LOIM_ERROR_UNSUPPORTED_FORMAT;
     }
@@ -273,6 +322,8 @@ const char *loim_image_format_name(loim_image_format format)
         return "GIF";
     case LOIM_IMAGE_FORMAT_BMP:
         return "BMP";
+    case LOIM_IMAGE_FORMAT_WEBP:
+        return "WebP";
     default:
         return "unknown";
     }

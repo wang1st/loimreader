@@ -60,3 +60,19 @@ AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
 LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
 OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
 SOFTWARE.
+
+## libwebp 1.3.2
+
+LoimReader 静态使用 libwebp 解码 WebP 图片，包括扩展名被错误写成
+`.jpg` 的 WebP 内容。
+
+- 来源：https://github.com/libsdl-org/libwebp
+- 固定提交：`42611dee80e9dd744e6fca13c11c682d36463b9d`
+- 许可：BSD 3-Clause License
+- 完整许可文本：安装包中的 `libwebp-LICENSE.txt`
+
+## Monocypher 4.0.3
+
+Ed25519 verification uses unmodified Monocypher sources, dual licensed under
+BSD-2-Clause OR CC0-1.0. See vendor/monocypher/LICENCE.md and the installed
+Monocypher-LICENSE.txt. Upstream: https://monocypher.org/.

@@ -664,6 +664,7 @@ static loim_login_request test_login_request(void)
     request.architecture = "arm64";
     request.os_name = "macOS";
     request.app_version = "3.0.0-test";
+    request.entitlement_nonce = NULL;
     return request;
 }
 
@@ -745,6 +746,26 @@ static void test_session_restore_uses_bearer_and_refreshes_subscription(void)
     CHECK(strcmp(result.subscription_expires_at, "2027-08-12T00:00:00.000Z") == 0);
 }
 
+static loim_status mock_login_success_over_http_error(
+    void *context, const char *url, const char *body,
+    char *response, size_t capacity, int *http_status)
+{
+    loim_status status = mock_login_post(context, url, body, response, capacity, http_status);
+    *http_status = 503;
+    return status;
+}
+
+static void test_login_rejects_success_over_http_error(void)
+{
+    loim_login_request request = test_login_request();
+    loim_login_result result;
+    mock_http mock = {0};
+    int http_status = 0;
+    CHECK(loim_auth_login(&request, mock_login_success_over_http_error,
+        &mock, &result, &http_status) == LOIM_ERROR_INVALID_DATA);
+    CHECK(http_status == 503);
+}
+
 static loim_status mock_legacy_session_post(
     void *context,
     const char *url,
@@ -823,6 +844,67 @@ static void test_subscription_authorization_uses_explicit_active_state(void)
     CHECK(loim_auth_parse_login_response(missing_subscription_json, &result) == LOIM_OK);
     CHECK(!result.subscription_active_present);
     CHECK(!loim_auth_result_is_licensed(&result));
+}
+
+static void test_auth_rejects_ambiguous_entitlements(void)
+{
+    loim_login_result result;
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"type\":\"unknown-paid\"}}",
+        &result) == LOIM_ERROR_INVALID_DATA);
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"active\":truejunk}}",
+        &result) == LOIM_ERROR_INVALID_DATA);
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":[]}",
+        &result) == LOIM_ERROR_INVALID_DATA);
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"type\":\"monthly\",\"active\":true,\"expiresAt\":null}}",
+        &result) == LOIM_OK);
+    CHECK(loim_auth_result_is_licensed(&result));
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"type\":\"enterprise\"}}",
+        &result) == LOIM_OK);
+    CHECK(loim_auth_result_is_licensed(&result));
+}
+
+static void test_auth_json_rejects_cross_scope_and_malformed_values(void)
+{
+    static const char *const invalid[] = {
+        "{\"success\":true,\"success\":false,\"token\":\"jwt\"}",
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"type\":\"free\",\"active\":false,\"active\":true}}",
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"active\":true,}}",
+        "{\"success\":true,\"token\":\"jwt\",\"extra\":[01]}",
+        "{\"success\":true,\"token\":\"jwt\",\"extra\":\"\\u12\"}",
+        "{\"success\":true,\"token\":\"jwt\\u0000injected\"}",
+        "{\"success\":true,\"token\":\"jwt\"} trailing"
+    };
+    size_t index;
+    char nested[2048] = "0";
+    char next[2048];
+    char response[4096];
+    loim_login_result result;
+    for (index = 0U; index < sizeof(invalid) / sizeof(invalid[0]); ++index) {
+        CHECK(loim_auth_parse_login_response(invalid[index], &result) == LOIM_ERROR_INVALID_DATA);
+    }
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"user\":{\"subscription\":{\"type\":\"free\"}},\"active\":true}",
+        &result) == LOIM_OK);
+    CHECK(!loim_auth_result_is_licensed(&result));
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"active\":false,\"\\u0061ctive\":true}}",
+        &result) == LOIM_ERROR_INVALID_DATA);
+    for (index = 0U; index < 28U; ++index) {
+        (void)snprintf(next, sizeof(next), "{\"a\":%s,\"b\":0}", nested);
+        memcpy(nested, next, strlen(next) + 1U);
+    }
+    (void)snprintf(response, sizeof(response),
+        "{\"success\":true,\"token\":\"jwt\",\"extra\":%s}", nested);
+    CHECK(loim_auth_parse_login_response(response, &result) == LOIM_OK);
+    CHECK(loim_auth_parse_login_response(
+        "{\"success\":true,\"token\":\"jwt\",\"user\":{\"subscription\":{\"active\":true,\"type\":\"custom-plan\"}},\"extra\":[null,1.2e+3,{\"value\":\"hello\\nworld\"}]}",
+        &result) == LOIM_OK);
+    CHECK(loim_auth_result_is_licensed(&result));
 }
 
 static void test_login_json_escapes_credentials(void)
@@ -1417,6 +1499,9 @@ int main(int argc, char **argv)
     test_session_restore_uses_bearer_and_refreshes_subscription();
     test_session_restore_rejects_missing_subscription_details();
     test_subscription_authorization_uses_explicit_active_state();
+    test_login_rejects_success_over_http_error();
+    test_auth_rejects_ambiguous_entitlements();
+    test_auth_json_rejects_cross_scope_and_malformed_values();
     test_login_json_escapes_credentials();
     test_login_error_response();
     test_login_rejects_malformed_response();

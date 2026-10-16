@@ -40,7 +40,7 @@ jobs:
           - platform: linux
             arch: arm64
             # GitHub's ARM64 hosted runners do not support Docker containers.
-            # Linux builds therefore run inside a glibc 2.31 (ubuntu:20.04)
+            # Linux builds therefore run inside a glibc 2.28 (Debian 10)
             # container on the x64 runner, with QEMU emulation for arm64.
             runner: ubuntu-24.04
           - platform: windows
@@ -87,11 +87,9 @@ jobs:
         if: runner.os == 'Linux' && matrix.arch == 'arm64'
         uses: docker/setup-qemu-action@v3
 
-      # Linux release packages must run on Kylin / UOS desktops, whose glibc
-      # is at most 2.31. Building on ubuntu-24.04 (glibc 2.39) produces
-      # binaries those systems reject. Build inside an ubuntu:20.04 container
-      # (glibc 2.31) instead so the .deb links only GLIBC_2.31 symbols.
-      - name: Build, test and package in glibc 2.31 container
+      # UOS V20 ships glibc 2.28. Build in the matching Debian 10 baseline so
+      # dpkg-shlibdeps and the ELF symbol versions remain installable there.
+      - name: Build, test and package in glibc 2.28 container
         if: runner.os == 'Linux'
         shell: bash
         env:
@@ -104,20 +102,23 @@ jobs:
             --env RELEASE_VERSION="$RELEASE_VERSION" \
             --env PLATFORM="${{ matrix.platform }}" \
             --env ARCH="${{ matrix.arch }}" \
-            ubuntu:20.04 \
+            debian/eol:buster@sha256:3207f48cbea2d8c398c1ecd43ba351c8cad5b2a3676cd365f5e144d51ff39650 \
             bash -euxo pipefail -c '
               export DEBIAN_FRONTEND=noninteractive
               apt-get update -qq
               apt-get install -y -qq --no-install-recommends \
-                build-essential cmake git ca-certificates cups-client curl \
+                build-essential git ca-certificates curl \
                 desktop-file-utils dpkg-dev \
                 file jq python3 python3-pip \
-                libsecret-tools \
+                fonts-dejavu-core \
+                xauth x11-utils xvfb \
                 libx11-dev libxext-dev libxrandr-dev libxcursor-dev \
                 libxi-dev libxfixes-dev libxss-dev libxtst-dev libwayland-dev \
-                libxkbcommon-dev libcurl4-openssl-dev fonts-noto-cjk
-              # ubuntu 20.04 ships cmake 3.16; this project requires >= 3.25.
-              python3 -m pip install --no-cache-dir cmake
+                libxkbcommon-dev libcurl4-openssl-dev
+              # Debian 10 ships CMake 3.13. Pin a cross-architecture wheel so
+              # both release builds use the same supported CMake version.
+              python3 -m pip install --no-cache-dir --upgrade pip==24.0
+              python3 -m pip install --no-cache-dir cmake==3.28.4
               export PATH="/usr/local/bin:$PATH"
               cmake -S . -B build \
                 -DLOIM_BUILD_LEGACY_QT=OFF \
@@ -128,12 +129,16 @@ jobs:
                 -DLOIM_RELEASE_PLATFORM="$PLATFORM" \
                 -DLOIM_RELEASE_ARCH="$ARCH" \
                 -DCMAKE_BUILD_TYPE=Release
-              cmake --build build --config Release --parallel
+              # Unbounded parallelism can make an emulated ARM64 build
+              # drastically slower through CPU and memory contention.
+              cmake --build build --config Release --parallel 2
               ctest --test-dir build --build-config Release --output-on-failure
               cmake --install build --config Release --prefix stage/LoimReader
               mkdir -p dist
               cpack --config build/CPackConfig.cmake -C Release -B dist
               package="dist/LoimReader_${RELEASE_VERSION}_${PLATFORM}_${ARCH}.deb"
+              sh tests/test_linux_deb_compatibility.sh \
+                "$package" stage/LoimReader/bin/LoimReader "$ARCH"
               desktop-file-validate \
                 packaging/linux/com.ctdy123.loimreader.desktop
               control_dir="$(mktemp -d)"
@@ -143,6 +148,10 @@ jobs:
               # No graphical session exists in this container. Installing the
               # general DEB must remain successful in that situation.
               dpkg -i "$package"
+              timeout -k 2s 30s sh tests/test_linux_window_icon_runtime.sh \
+                /usr/bin/LoimReader \
+                "$(command -v xvfb-run)" \
+                "$(command -v xprop)"
               # Files created by the container (root) must stay readable by the
               # runner user for later audit/upload steps.
               chmod -R a+rX /workspace/stage /workspace/dist
@@ -283,7 +292,7 @@ jobs:
           test -x "$control_dir/postinst"
           grep -Fq -- '--ensure-desktop-shortcut' "$control_dir/postinst"
 
-      - name: Verify glibc requirement does not exceed 2.31
+      - name: Verify glibc requirement does not exceed 2.28
         if: runner.os == 'Linux'
         shell: bash
         run: |
@@ -292,12 +301,12 @@ jobs:
           objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sort -Vu
           max_glibc="$(objdump -T "$binary" | grep -oE 'GLIBC_[0-9]+(\.[0-9]+)*' | sed 's/^GLIBC_//' | sort -V | tail -1)"
           echo "Highest required glibc: ${max_glibc}"
-          # Target desktops (Kylin / UOS) provide glibc up to 2.31.
-          if [[ "$(printf '%s\n2.31' "$max_glibc" | sort -V | tail -1)" != "2.31" ]]; then
-            echo "ERROR: binary requires glibc ${max_glibc}, above the 2.31 ceiling" >&2
+          # UOS V20 provides glibc 2.28.
+          if [[ "$(printf '%s\n2.28' "$max_glibc" | sort -V | tail -1)" != "2.28" ]]; then
+            echo "ERROR: binary requires glibc ${max_glibc}, above the 2.28 ceiling" >&2
             exit 1
           fi
-          echo "glibc compatibility check passed (<= 2.31)"
+          echo "glibc compatibility check passed (<= 2.28)"
 
       - name: Verify macOS disk image
         if: runner.os == 'macOS'

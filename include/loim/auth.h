@@ -5,6 +5,7 @@
 #include <stddef.h>
 
 #include "loim/status.h"
+#include "loim/entitlement.h"
 
 #ifdef __cplusplus
 extern "C" {
@@ -22,6 +23,7 @@ typedef struct loim_login_request {
     const char *architecture;
     const char *os_name;
     const char *app_version;
+    const char *entitlement_nonce; /* NULL for legacy API callers. */
 } loim_login_request;
 
 typedef struct loim_login_result {
@@ -35,6 +37,8 @@ typedef struct loim_login_result {
     char subscription_expires_at[64];
     char error_code[64];
     char message[512];
+    char entitlement_payload[LOIM_ENTITLEMENT_PAYLOAD_CAPACITY];
+    char entitlement_signature[LOIM_ENTITLEMENT_SIGNATURE_CAPACITY];
 } loim_login_result;
 
 typedef loim_status (*loim_auth_post_fn)(

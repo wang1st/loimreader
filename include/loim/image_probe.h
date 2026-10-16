@@ -14,7 +14,8 @@ typedef enum loim_image_format {
     LOIM_IMAGE_FORMAT_PNG,
     LOIM_IMAGE_FORMAT_JPEG,
     LOIM_IMAGE_FORMAT_GIF,
-    LOIM_IMAGE_FORMAT_BMP
+    LOIM_IMAGE_FORMAT_BMP,
+    LOIM_IMAGE_FORMAT_WEBP
 } loim_image_format;
 
 typedef struct loim_image_info {
