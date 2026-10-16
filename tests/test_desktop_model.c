@@ -893,12 +893,19 @@ static void test_auth_json_rejects_cross_scope_and_malformed_values(void)
     CHECK(loim_auth_parse_login_response(
         "{\"success\":true,\"token\":\"jwt\",\"subscription\":{\"active\":false,\"\\u0061ctive\":true}}",
         &result) == LOIM_ERROR_INVALID_DATA);
-    for (index = 0U; index < 28U; ++index) {
-        size_t length = strlen(nested);
-        CHECK(length + 13U <= sizeof(nested));
-        memmove(nested + 5U, nested, length);
-        memcpy(nested, "{\"a\":", 5U);
-        memcpy(nested + 5U + length, ",\"b\":0}", 8U);
+    {
+        size_t used = 0U;
+        _Static_assert(28U * 12U + 2U <= sizeof(nested), "nested JSON fixture fits");
+        for (index = 0U; index < 28U; ++index) {
+            memcpy(nested + used, "{\"a\":", 5U);
+            used += 5U;
+        }
+        nested[used++] = '0';
+        for (index = 0U; index < 28U; ++index) {
+            memcpy(nested + used, ",\"b\":0}", 7U);
+            used += 7U;
+        }
+        nested[used] = '\0';
     }
     (void)snprintf(response, sizeof(response),
         "{\"success\":true,\"token\":\"jwt\",\"extra\":%s}", nested);
