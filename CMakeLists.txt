@@ -6,7 +6,7 @@ cmake_minimum_required(VERSION 3.25)
 option(LOIM_BUILD_LEGACY_QT "Build the legacy Qt application" OFF)
 
 if(NOT LOIM_BUILD_LEGACY_QT)
-    set(LOIM_VERSION_OVERRIDE "3.0.14" CACHE STRING "C17 application version")
+    set(LOIM_VERSION_OVERRIDE "3.0.15" CACHE STRING "C17 application version")
     string(REGEX MATCH "^[0-9]+\\.[0-9]+\\.[0-9]+" LOIM_NUMERIC_VERSION "${LOIM_VERSION_OVERRIDE}")
     if(NOT LOIM_NUMERIC_VERSION)
         message(FATAL_ERROR "LOIM_VERSION_OVERRIDE must start with major.minor.patch")
